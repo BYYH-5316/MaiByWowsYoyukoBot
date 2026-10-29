@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+    <meta charset="utf-8">
+    <title></title>
+    <link href="{{ template_path.as_uri() }}/main-v6.css" rel="stylesheet" type="text/css">
+    <link href="{{ template_path.as_uri() }}/avatar-v6.css" rel="stylesheet" type="text/css">
+</head>
+<style>
+    body {
+        width: 660px;
+        background: linear-gradient(180deg, #f6f4ff 0%, #eef1f8 100%);
+    }
+
+    .main-content {
+        width: 660px;
+        margin: 20px auto;
+        font-family: "Microsoft YaHei Bold", "Microsoft YaHei", sans-serif;
+        font-size: 20px;
+        border-radius: 16px;
+        font-weight: bold;
+        background: rgba(245, 240, 255, 0.5);
+        border: 2px solid rgba(180, 160, 230, 0.6);
+        box-shadow: 0 2px 12px rgba(200, 190, 255, 0.15);
+        overflow: hidden;
+        box-sizing: border-box;
+    }
+
+    .header {
+        height: 80px;
+        display: flex;
+        align-items: center;
+        line-height: 40px;
+        background: linear-gradient(135deg, rgba(106, 17, 203, 0.08) 0%, rgba(37, 117, 252, 0.08) 100%);
+        border-bottom: 2px solid rgba(180, 160, 230, 0.4);
+    }
+
+    .header-text {
+        color: #4a4a4a;
+    }
+
+    .table-style {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        border: none;
+    }
+
+    .table-style th,
+    .table-style td {
+        padding: 12px;
+        border: 1px solid rgba(180, 160, 230, 0.3);
+    }
+
+    .table-style th {
+        background: rgba(245, 240, 255, 0.8);
+        color: #4a4a4a;
+        font-size: 18px;
+    }
+
+    .table-style tbody tr:nth-child(odd) {
+        background: rgba(180, 160, 230, 0.12);
+    }
+
+    .center-align {
+        text-align: center;
+    }
+
+    .center-align-index {
+        color: #6a11cb;
+        font-weight: bold;
+    }
+
+    .img-text-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .img-text-wrapper img {
+        object-fit: cover;
+    }
+
+    .ship-level-v2 {
+        font-weight: bold;
+        color: #6a11cb;
+    }
+</style>
+<body>
+<div class="main-content">
+    <div class="header">
+        <div class="sec">20s</div>
+        <div class="header-text">
+            <div>存在多条名字相似的船</div>
+            <div>请在20秒内选择对应的序号</div>
+        </div>
+    </div>
+    <table class="table-style">
+        <colgroup>
+            <col style="width: 52px;">
+            <col style="width: 80px;">
+            <col style="width: 100px;">
+            <col style="width: 140px;">
+            <col style="width: 140px;">
+            <col style="width: 140px;">
+        </colgroup>
+        <thead>
+        <tr>
+            <th class="center-align">序</th>
+            <th class="center-align"><img src="https://v3-api.wows.shinoaki.com/nahida-static/server.png" width="20px" height="20px"></th>
+            <th>等级</th>
+            <th class="center-align center-align-name">战舰名称①</th>
+            <th class="center-align center-align-name">战舰名称②</th>
+            <th class="center-align center-align-name">战舰名称③</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for ship in data %}
+            <tr>
+                <td class="center-align center-align-index"></td>
+                <td class="center-align">{{ ship['serverType'] }}</td>
+                <td>
+                    <div class="img-text-wrapper">
+                        <span class="ship-level-v2">{{ ship['levelStr'] }}</span>
+                        {% if ship['shipType'] == 'Destroyer' %}
+                            <img src="https://hikari-resource.oss-cn-shanghai.aliyuncs.com/shipType_Icon/icon_sunk_destroyer.png">
+                        {% elif ship['shipType'] == 'Cruiser' %}
+                            <img src="https://hikari-resource.oss-cn-shanghai.aliyuncs.com/shipType_Icon/icon_sunk_cruiser.png">
+                        {% elif ship['shipType'] == 'Battleship' %}
+                            <img src="https://hikari-resource.oss-cn-shanghai.aliyuncs.com/shipType_Icon/icon_sunk_battleship.png">
+                        {% elif ship['shipType'] == 'AirCarrier' %}
+                            <img src="https://hikari-resource.oss-cn-shanghai.aliyuncs.com/shipType_Icon/icon_sunk_aircarrier.png">
+                        {% elif ship['shipType'] == 'Submarine' %}
+                            <img src="https://hikari-resource.oss-cn-shanghai.aliyuncs.com/shipType_Icon/icon_sunk_submarine.png">
+                        {% endif %}
+                    </div>
+                </td>
+                <td class="center-align">{{ ship['nameCn'] }}</td>
+                <td class="center-align">{{ ship['nameCn360'] }}</td>
+                <td class="center-align">{{ ship['nameEnglish'] }}</td>
+            </tr>
+        {% endfor %}
+
+        </tbody>
+    </table>
+</div>
+</body>
+
+<script>
+    let index_doc = document.getElementsByClassName('center-align-index');
+    for(let idx=0;idx<index_doc.length;idx++) {
+        index_doc[idx].innerText = idx+1;
+    }
+</script>
+</html>

@@ -1,0 +1,624 @@
+/* ==========================================================
+   Hikari 模板体系 v6 — 全局统一样式（全模板共用）
+
+   视觉规范：
+   - 毛玻璃卡片（20px 圆角）+ 统一 50px 页边距（与 page-header 对齐）
+   - 小节标题条：通栏 + 左侧紫色渐变强调条（.random-header）
+   - 数据表格：表头灰底 + 斑马纹 + 分隔线（.information-body / .information-col）
+   - 统计卡：Flex 垂直居中，无硬编码高度/行高（.item-top / .bottom-mini-item）
+   - 类名兼容：保留 main-v5 全部类名，视觉统一为 v6
+   ========================================================== */
+
+* {
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+/* 垂直节奏：
+   --gap-block  板块与板块之间的间距
+   --gap-inner  小节标题条 与 其内容 之间的间距 */
+:root {
+    --gap-block: 16px;
+    --gap-inner: 16px;
+}
+
+body {
+    font-family: "Microsoft YaHei Bold", "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+
+.page-box {
+    width: 1500px;
+    display: flex;
+    flex-direction: column;
+}
+
+.main-content,
+body {
+    width: 1500px;
+    font-size: 30px;
+    font-weight: bold;
+}
+
+/* ---------- 布局弹性工具 ---------- */
+
+.flex-1 { flex: 1; }
+.flex-2 { flex: 2; }
+.flex-3 { flex: 3; }
+.flex-4 { flex: 4; }
+.flex-8 { flex: 8; }
+.flex-10 { flex: 10; }
+.flex-12 { flex: 12; }
+
+/* ==========================================================
+   毛玻璃底色
+
+   ▍两个全局旋钮（由 partials/*-v6-macros.html 的 info_header_style 在「有海报」时
+     下发到 .main-content 上；没下发时用 var() 的缺省值 1 = 当前观感）：
+        --card-alpha  卡片底色**透明度倍数**  1 = 现状，0 = 底色完全透明
+        --card-blur   毛玻璃**模糊强度倍数**  1 = 现状，0 = 完全不模糊
+     两个旋钮各自独立：alpha 管"有没有底色"，blur 管"背后糊不糊"。
+     同一个 base 值只写一次（下面就乘这两个变量），别在别处再写死一遍。
+   ▍这里的 var() **必须带缺省值 (1)**：宏不输出变量时（无海报的页面、拖钓调试页）
+     要退回现状，而不是让整条声明失效。
+   ========================================================== */
+
+.one-background-color {
+    background: rgba(245, 240, 255, calc(0.42 * var(--card-alpha, 1)));
+    backdrop-filter: blur(calc(6px * var(--card-blur, 1)));
+    -webkit-backdrop-filter: blur(calc(6px * var(--card-blur, 1)));
+    border: 1.5px solid rgba(180, 160, 230, 0.45);
+    box-shadow: 0 4px 14px rgba(120, 100, 180, 0.12);
+}
+
+/* 表格行玻璃条（保留类名兼容） */
+.two-background-color {
+    background: rgba(255, 255, 255, calc(0.2 * var(--card-alpha, 1)));
+    backdrop-filter: blur(calc(4px * var(--card-blur, 1)));
+    -webkit-backdrop-filter: blur(calc(4px * var(--card-blur, 1)));
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* 实色块：**不参与**上面两个旋钮 —— 它是"不透明底"的语义，
+   blur 也刻意关掉（见 partials 的注释），加了变量反而把用途弄混。 */
+.three-background-color {
+    background: #D9D9D9;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 2px solid #C0C0C0;
+}
+
+/* ==========================================================
+   通用标题 / 徽章
+   ========================================================== */
+
+/* 大字头标题条（排行榜等） */
+.title-header {
+    margin: 40px 50px 30px;
+    height: 120px;
+    line-height: 120px;
+    text-align: center;
+    font-size: 44px;
+    font-weight: bold;
+    color: #ffffff;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+    box-shadow: 0 4px 16px rgba(106, 17, 203, 0.25);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 序号徽标（选择列表） */
+.sec {
+    margin: 15px;
+    height: 50px;
+    width: 50px;
+    text-align: center;
+    line-height: 50px;
+    border-radius: 25px;
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+    color: #ffffff;
+    font-weight: normal;
+    flex-shrink: 0;
+}
+
+/* 服务器徽章 */
+.server-border {
+    width: 150px;
+    height: 40px;
+    line-height: 40px;
+    background: rgba(245, 240, 255, calc(0.6 * var(--card-alpha, 1)));
+    border: 2px solid rgba(180, 160, 230, 0.6);
+    border-radius: 20px;
+    font-size: 30px;
+}
+
+.server-style {
+    font-weight: bold;
+}
+
+/* 水面大字（单船页）：宽度按内容自适应，上限与 page-header 同宽(1400px) */
+.ship-header {
+    margin: var(--gap-block) auto 0px;
+    width: fit-content;
+    max-width: 1400px;
+    text-align: center;
+    font-size: 55px;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 舰船标题玻璃面板：与 overview-change 同款（配合 one-background-color 使用） */
+.ship-title-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 40px 8px 26px;
+    border-radius: 20px;
+    color: #3c3c4c;
+    max-width: 100%;
+}
+
+/* 舰名：超长时省略 */
+.ship-title-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ==========================================================
+   数据表格（信息列 / 标签行）
+   ========================================================== */
+
+/* 小节标题条：通栏 + 左侧紫渐变强调条 */
+.random-header {
+    position: relative;
+    margin: var(--gap-block) 50px 0;
+    height: 58px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    letter-spacing: 3px;
+    color: #3c3c4c;
+}
+
+.random-header::before {
+    content: '';
+    position: absolute;
+    left: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 30px;
+    border-radius: 4px;
+    background: linear-gradient(180deg, #6a11cb 0%, #2575fc 100%);
+}
+
+.random-table-header .random-col-item {
+    line-height: 60px;
+}
+
+/* 简单表格（选择列表等） */
+.table-style {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.table-style th,
+.table-style td {
+    padding: 12px;
+    border: 1px solid rgba(180, 160, 230, 0.35);
+}
+
+/* 信息表容器 */
+.information-body {
+    margin: var(--gap-inner) 50px 0;
+    border-radius: 16px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, calc(0.30 * var(--card-alpha, 1)));
+    backdrop-filter: blur(calc(6px * var(--card-blur, 1)));
+    -webkit-backdrop-filter: blur(calc(6px * var(--card-blur, 1)));
+    border: 1.5px solid rgba(180, 160, 230, 0.35);
+    box-shadow: 0 4px 14px rgba(120, 100, 180, 0.10);
+}
+
+/* 信息表行（兼容 v5 markup：首行自动表头、斑马纹、分隔线） */
+.information-col {
+    display: flex;
+    align-items: center;
+    height: 62px;
+    text-align: center;
+    font-size: 28px;
+    line-height: 1.3;
+}
+
+.information-col + .information-col {
+    border-top: 1px solid rgba(180, 160, 230, 0.22);
+}
+
+/* 表头 / 斑马纹两层的底色是**半透明叠加**（表头是"压暗"，斑马纹是"提亮"），
+   同样乘 --card-alpha：拉到 0 时表头、斑马纹一起消失，只剩 .information-body 的底。 */
+.information-col:first-child,
+.information-col.header-col {
+    background: rgba(0, 0, 0, calc(0.07 * var(--card-alpha, 1)));
+    font-weight: normal;
+    font-size: 26px;
+    color: #4a4a5a;
+}
+
+.information-col:not(:first-child):nth-child(even) {
+    background: rgba(255, 255, 255, calc(0.28 * var(--card-alpha, 1)));
+}
+
+.information-col-item {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 带类型标签的表格（data-battle-type）：首列"类型"加宽，其余等宽 */
+.data-battle-type .information-col-item:first-child {
+    flex: 1.4;
+}
+
+/* 表格列宽工具：.information-col-item 自带 flex:1 且写在 .flex-N 之后，
+   单靠 .flex-N 会被它盖掉，这里用双类名把权重提上来。
+   用法：<div class="information-col-item flex-6"> */
+.information-col-item.flex-1 { flex: 1; }
+.information-col-item.flex-2 { flex: 2; }
+.information-col-item.flex-3 { flex: 3; }
+.information-col-item.flex-4 { flex: 4; }
+.information-col-item.flex-5 { flex: 5; }
+.information-col-item.flex-6 { flex: 6; }
+.information-col-item.flex-8 { flex: 8; }
+.information-col-item.flex-10 { flex: 10; }
+
+/* ---------- 段位徽标（公会信息 / 公会战 / 公会战排行榜共用） ----------
+   色条 + 段位名 + 分数，放在表格单元里用 */
+.league-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.league-tag > i {
+    flex-shrink: 0;
+    width: 10px;
+    height: 30px;
+    border-radius: 4px;
+    background: #b3b3b3;
+}
+
+/* 记录时间小标题（近期模板） */
+.recent-time-header {
+    margin: var(--gap-block) 50px 0;
+    width: 200px;
+    height: 56px;
+    line-height: 56px;
+    border-radius: 16px;
+    text-align: center;
+    font-size: 26px;
+    color: #3c3c4c;
+}
+
+/* ==========================================================
+   统计卡（大卡 + 小卡，Flex 居中）
+   ========================================================== */
+
+.overview-change {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+    margin: var(--gap-block) 50px 0;
+}
+
+.overview-change-item {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-width: 0;
+}
+
+.item-top {
+    height: 210px;
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+/* 大卡文字（v6 命名 + v5 兼容命名） */
+.stat-label,
+.item-top-top {
+    font-size: 30px;
+    font-weight: normal;
+    color: #4a4a5a;
+    line-height: 1.3;
+    height: auto;
+}
+
+.stat-value,
+.item-top-bottom {
+    font-size: 56px;
+    font-weight: bold;
+    line-height: 1.1;
+    height: auto;
+}
+
+.item-bottom {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+}
+
+.bottom-mini-item,
+.bottom-mini-item-left,
+.bottom-mini-item-right {
+    height: 130px;
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+/* 小卡文字 */
+.mini-label,
+.mini-item-top {
+    font-size: 26px;
+    font-weight: normal;
+    color: #4a4a5a;
+    line-height: 1.3;
+    height: auto;
+}
+
+.mini-value,
+.mini-item-bottom {
+    font-size: 34px;
+    font-weight: bold;
+    line-height: 1.2;
+    height: auto;
+}
+
+/* ==========================================================
+   最高记录
+   ========================================================== */
+
+.frag-data {
+    margin: var(--gap-inner) 50px 0;
+    display: flex;
+    gap: 18px;
+}
+
+.frag-data-col {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    gap: 18px;
+}
+
+.frag-item {
+    flex: 1;
+    height: 126px;
+    min-width: 0;
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.frag-key {
+    font-size: 26px;
+    font-weight: normal;
+    color: #4a4a5a;
+    line-height: 1.3;
+    height: auto;
+}
+
+.frag-value {
+    font-size: 32px;
+    font-weight: bold;
+    line-height: 1.2;
+    height: auto;
+}
+
+/* ==========================================================
+   单船数据区（wws-ship 系列）
+   ========================================================== */
+
+.ship-data-col {
+    display: flex;
+    height: 70px;
+    align-items: center;
+}
+
+.ship-data-col + .ship-data-col {
+    border-top: 1px solid rgba(180, 160, 230, 0.22);
+}
+
+.ship-information-col {
+    color: #606266;
+    height: 60px;
+    display: flex;
+    align-items: center;
+}
+
+.ship-col-item {
+    text-align: center;
+    min-width: 0;
+}
+
+.ship-col-item-ship {
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+    min-width: 0;
+}
+
+.ship-name {
+    text-align: center;
+    margin-left: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-grow: 1;
+    width: 0;
+}
+
+/* 舰船行 · 战舰列（国旗 | 类型 | 等级 | 舰图 | 名称，同一行五列）
+   调整大小：改 .ship-cell 里的 --fw/--fh（国旗宽高）、--tw/--th（类型图）、--sw/--sh（舰图）即可
+   调整间距：改 .ship-cell 里的 --g-flag-type / --g-type-level / --g-level-img / --g-img-name 即可
+
+   ⚠ 这里刻意不给 .ship-cell 设 padding（左右留白交给 --cell-pad，落在首尾子元素上）：
+     战舰列的宽度是 flex: N 按比例分出来的，而 *.ship-cell 是 border-box，
+     flex-basis:0 不能小于 padding+border，于是数据列的实际宽度 = padding + 比例份额，
+     比同样写 flex-N 的表头列（无 padding）宽出 24px 那部分 —— 实测宽 17.6px（390.4 vs 372.8），
+     结果表头"战舰"列比数据窄，后面每一列都跟着错位（场次偏 17px、命中偏 3px）。 */
+.ship-cell {
+    --fw: 44px;   /* 国旗宽 */
+    --fh: 38px;   /* 国旗高（各列统一高度） */
+    --tw: 44px;   /* 类型图宽 */
+    --th: 38px;   /* 类型图高 */
+    --sw: 70px;   /* 舰图宽（独立可调） */
+    --sh: 40px; /* 舰图高（独立可调，默认跟随国旗高） */
+    /* 列间距（各自独立可调） */
+    --g-flag-type: 0px;   /* 国旗 → 类型 */
+    --g-type-level: 0px;  /* 类型 → 等级 */
+    --g-level-img: 3px;   /* 等级 → 舰图 */
+    --g-img-name: 12px;    /* 舰图 → 名称 */
+    --cell-pad: 12px;     /* 战舰列左右留白（等于原来的左右内边距） */
+    display: flex;
+    align-items: center;
+    gap: 0;   /* 间距统一由上面的 --g-* 变量控制 */
+    padding: 0;
+    min-width: 0;
+}
+
+/* 列间距落地：各列只吃自己左侧那一段间距 */
+.ship-cell > .sb-type { margin-left: var(--g-flag-type); }
+.ship-cell > .sb-level { margin-left: var(--g-type-level); }
+.ship-cell > .sb-ship-img { margin-left: var(--g-level-img); }
+.ship-cell > .ship-name { margin-left: var(--g-img-name); }
+/* 左右留白由首尾子元素承担，避免 .ship-cell 被内边距撑出 flex 比例之外 */
+.ship-cell > .sb-flagbox { margin-left: var(--cell-pad); }
+.ship-cell > .ship-name { margin-right: var(--cell-pad); }
+
+.sb-flagbox {
+    position: relative;
+    width: var(--fw);
+    height: var(--fh);
+    flex-shrink: 0;
+}
+
+.sb-flag {
+    position: absolute;
+    inset: 0;
+}
+
+/* 类型列 */
+.sb-type {
+    width: var(--tw);
+    height: var(--th);
+    box-sizing: border-box;
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+    flex-shrink: 0;
+}
+
+/* 等级列：固定最小宽度，保证各行数字对齐 */
+.sb-level {
+    font-size: 20px;
+    font-weight: bold;
+    white-space: nowrap;
+    min-width: 34px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+/* 舰图列：宽高独立可调（--sw/--sh），默认高度跟随国旗 */
+.sb-ship-img {
+    width: var(--sw);
+    height: var(--sh);
+    flex-shrink: 0;
+}
+
+/* 名称列：靠左显示 */
+.ship-cell .ship-name {
+    text-align: left;
+}
+
+/* ==========================================================
+   图表
+   ========================================================== */
+
+.chart-box {
+    margin: var(--gap-block) 50px 40px;
+    height: 480px;
+    border-radius: 20px;
+    padding: 14px 8px;
+    display: flex;
+    align-items: stretch;
+}
+
+.chart-bar {
+    flex: 6;
+    min-width: 0;
+}
+
+.chart-pie {
+    flex: 4;
+    min-width: 0;
+}
+
+/* ==========================================================
+   时间行
+   ========================================================== */
+
+.recnet-time {
+    margin-top: var(--gap-block);
+    display: flex;
+    justify-content: center;
+    gap: 60px;
+    font-size: 26px;
+    font-weight: normal;
+    color: #5f6472;
+}
+
+.recnet-time .time-item {
+    display: inline-block;
+}
+
+/* ==========================================================
+   页脚
+   ========================================================== */
+
+.footer {
+    margin: 0 50px var(--gap-block);
+    text-align: center;
+    font-size: 22px;
+    line-height: 1.8;
+    color: #6b7080;
+}
+
+.footer p {
+    text-shadow: 0 1px 3px rgba(255, 255, 255, 0.4);
+}

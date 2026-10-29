@@ -1,0 +1,44 @@
+{# ==========================================================
+   v6 家族公共部件 —— 用户页 / 公会页都用，且**本身没有**用户/公会分支的部件
+   - info_pr():     PR 横幅
+   - ship_header(): 单船页顶部的船名条
+   - footer_box():  统一页脚
+   调用方式: {% from 'partials/common-v6-macros.html' import ... with context %}
+
+   头部（info_header_style / info_header）不在这个文件里：
+     - 用户侧 → partials/user-v6-macros.html
+     - 公会侧 → partials/clan-v6-macros.html
+   原先两边挤在一份实现里、靠 is_clan 分支兜字段差异，页面一多就看不清谁是谁，
+   所以按「用户 / 公会」拆成两份各自维护，公共部件留在这里。
+   ========================================================== #}
+
+{% macro info_pr(pr_info) %}
+<div class="pr" style="background: {{ pr_info['color'] }};">
+    <div class="svg-waves">
+        <svg viewBox="0 0 500 200" preserveAspectRatio="none">
+            <path class="wave-path" d="M0,100 C150,200 350,0 500,100 L500,200 L0,200 Z"></path>
+        </svg>
+    </div>
+    <span class="pr-number">{{ pr_info['value'] }}
+        <span class="pr-text">{{ pr_info['name'] }}</span></span>
+</div>
+{% endmacro %}
+
+{% macro ship_header(ship) %}
+<div class="ship-header">
+    <div class="ship-title-pill one-background-color">
+        <span style="background: url('{{ ship['countryImage'] }}') no-repeat; background-size: contain; background-position: center; padding: 34px;"></span>
+        <span style="background: url('{{ ship['shipTypeImage'] }}') no-repeat; background-size: contain; background-position: center; padding: 34px;"></span>
+        <span>{{ ship['levelStr'] }}</span>
+        <img class="ship-box" src="{{ ship['imgSmall'] }}" style="width: 120px; height: 100%;">
+        <span class="ship-title-name">{{ ship['nameCn'] }}</span>
+    </div>
+</div>
+{% endmacro %}
+
+{% macro footer_box() %}
+<div class="footer">
+    <p>频道搜索"战舰世界-yuyuko"即可使用稳定的腾讯官方机器人~</p>
+    <p>©github:wows-yuyuko</p>
+</div>
+{% endmacro %}

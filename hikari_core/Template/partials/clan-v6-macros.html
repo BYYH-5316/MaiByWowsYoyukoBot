@@ -1,0 +1,308 @@
+{# ==========================================================
+   v6 公会侧头部（公会信息页 wws-clan-v6 等公会系页面共用）
+   - info_header_style(): 头部数据绑定样式（海报 / 彩色名 / banner / 头像背景）
+   - info_header():       头部标记（banner_dark 白字通过 .dark-banner 类控制）
+   调用方式: {% from 'partials/clan-v6-macros.html' import info_header_style, info_header with context %}
+   PR 条 / 页脚见 partials/common-v6-macros.html。
+
+   数据来源：/public/wows/clan/info 的 data —— **顶层就是公会字段本身**，不用再往 userInfo 里钻。
+   用户的头部在 partials/user-v6-macros.html，两份各自维护，这边只认公会接口的字段：
+     公会名 name          服务器 server(asia，交给 server_cn())     ID clanId
+     建号时间 createdAt（**毫秒**，比用户接口的秒多一步 /1000）
+     标签 tag / 标签色 colorRgb
+     头像槽位 4 个：poster / colorName / banner / avatar（**没有 sign，也没有 dogTag 兜底**）
+   ▍槽位形状（2026-09-30 契约 v3）：{ status, data, attrs } —— 与用户侧同源，
+     参数进 attrs（banner→dark、poster→opacity、glassmorphismCard→alpha/blur），
+     status 值域收窄成 0/1。
+   ▍**赛季段位头像整套已废弃**（2026-09-30，服务端同期删除 `WowsClanAvatar.avatarText`）：
+     旧契约里 `avatar.status == 2` 表示「赛季段位徽章」，模板会叠一层底座 + 盖一行排名字。
+     现在公会头像不再回落到段位图，status 只剩 0/1，那套分支已整体删除 ——
+     要恢复得同时动本文件 + avatar-v6.css（.avatar-text 那组样式）+ 服务端 DTO。
+   ========================================================== #}
+
+{% macro info_header_style(poster=true) %}
+{%- set u = data -%}
+{%- set avatar_box = u['avatar'] if u['avatar'] is defined and u['avatar'] else {} -%}
+{%- set poster_img = avatar_box['poster'] if avatar_box['poster'] is defined else none -%}
+{%- set color_name = avatar_box['colorName'] if avatar_box['colorName'] is defined else none -%}
+{%- set banner = avatar_box['banner'] if avatar_box['banner'] is defined else none -%}
+{%- set avatar_img = avatar_box['avatar'] if avatar_box['avatar'] is defined else none -%}
+{# 头像槽位语义（用户 / 公会一致）：status == 0 不显示，> 0 显示。
+   v3 起值域只剩 0/1 —— 旧契约里"2 及以上自定义"那个第三态已取消
+   （公会侧旧 status == 2 还兼管「赛季段位徽章」，那套已整体废弃，见文件头）。
+   槽位缺席 / status 缺失按 0 处理。公会接口没有 dogTag 兜底，status == 0 就是整块隐藏。 #}
+{%- set avatar_status = (avatar_img['status'] | int) if avatar_img and avatar_img['status'] is defined else 0 -%}
+{# 大背景图透明度：渲染侧键 `poster.attrs.opacity`。▍服务端口径（已对齐，别改）：
+       0   = 完全不透明 → 背景图**完全显示**（最实，缺省）
+       100 = 完全透明   → 背景图**完全看不见**
+   中间线性（50 = 半透明）。缺省 / 非数字一律按 0（完全显示）兜底。
+   夹到 0-100，脏数据不会写出非法 CSS。
+
+   ▍2026-09-30 契约 v3（attrs 化）：这个值从顶层 `poster.dark` 挪进
+   `poster.attrs.opacity` 并改了键名 —— **只是换位置 + 改名，方向没翻**
+   （服务端把旧 dark 值原样写进 opacity，缺省仍是 0，见服务端
+   docs/avatar-schema-redesign.md §11）。所以下面那次 `100 -` 换算照旧要做。
+   ▍变量名刻意把两个方向分开：poster_fade = **透明度**（越大越淡，接口值），
+   poster_opacity = **不透明度**（CSS 要的，= 100 - fade）。
+   与用户侧 partials/user-v6-macros.html 同源，改一边记得改另一边。 #}
+{%- set poster_attrs = poster_img['attrs'] if poster_img and poster_img['attrs'] is defined else {} -%}
+{%- set poster_fade = dget(poster_attrs, 'opacity', 0) | int -%}
+{%- set poster_fade = [[poster_fade, 0] | max, 100] | min -%}
+{%- set poster_opacity = 100 - poster_fade -%}
+{# 遮罩 alpha = (100 - 不透明度) / 200，固定两位小数。
+   统一放大成「百分位的整数」再拆：
+       poster_mask_pct = (100 - opacity) * 100 / 200   ← 一千分位，例如 42 → 2900
+       整数部分 = poster_mask_pct / 100  (2900 / 100 = 29)
+       小数部分 = poster_mask_pct % 100  (2900 % 100 = 00)
+   —— 直接算 (100 - opacity) * 50 得到的是一千分位没错，但再 % 100 拿小数位就串了，
+   必须先把「一千分位」落到同一个变量上，整数 / 小数都从它身上取。
+   三个坑：
+     1) **不能**用 round() 收尾 —— Jinja 的 round(3) 对 50.0 这种整数浮点会输出
+        "50.0"，写进 rgba(0, 0, 0, 50.0) 就是 alpha = 50（全不透明黑），背景图变黑块；
+     2) **不能**写成 `a ~ '.' ~ '%02d' | format(b)` —— 过滤器只作用于最右边那个
+        表达式，会把整串拼接结果一起 format 掉；
+     3) **不能**用 `//` 直接当整数用 —— Jinja 的 `//` 是浮点除（Python 2 语义），
+        2900 // 100 得到的是 29.0 而不是 29。
+   所以整数部分走 int()，小数部分单独 format，再拼起来。
+   与用户侧 partials/user-v6-macros.html 同源，改一边记得改另一边。 #}
+{%- set poster_mask_pct = (100 - poster_opacity) * 100 // 200 | int -%}
+{%- set poster_mask_frac = '%02d' | format((poster_mask_pct % 100) | int) -%}
+{%- set poster_mask = (poster_mask_pct // 100) | int ~ '.' ~ poster_mask_frac -%}
+{# 大背景图的**纵向取景位置**（对齐方式）。
+   ▍**固定「顶部」= 0%，不读数据、不可调**（2026-09-19 起，产品决定）。
+     早先这里认 poster_img['align']（数字 0-100，或 'top'/'center'/'bottom'，缺省居中），
+     现在一律按顶部渲染 —— 老数据里存着的对齐值**直接忽略**（不是"缺省值变了"，
+     是彻底不读）。编辑器（web/avatar-editor）那边也已把「纵向对齐」这个旋钮撤掉。
+     要改回可调得同时动四处：本文件 + partials/user-v6-macros.html +
+     web/avatar-editor/avatar-editor.js 的 _styleText + index.html 的面板。
+   ▍为什么固定顶部：这个值**只在页面比 2250px 矮时看得出来**（cover 按宽贴合、纵向被裁）。
+     分界点 = 图高 4096 × 容器宽 1500 / 图宽 2731 = 2250px：
+       页高 ≥ 2250 → 按高贴合，图片高度正好铺满，纵向位置怎么调都是同一个画面
+                    （也就是说**长页上「顶部」与「居中」渲染完全相同**）；
+       页高 < 2250 → 按宽贴合、纵向被裁，这时只有「顶部」能保证**各页取景一致**
+                    （短页看到的永远是图的最上面那一段）。
+     所以固定顶部既覆盖了长页，又让短页之间不再飘。
+   ▍为什么当初不做成 poster.crop.y：裁剪器那边表达不了 —— 预览的取景框 = 实时页高，
+     cover 之下纵向溢出≈0，getPosition() 一律报 50（见 avatar-editor.js 的注释）。
+   与用户侧 partials/user-v6-macros.html 同源，改一边记得改另一边。 #}
+{%- set poster_pos_y = 0 -%}
+{# 毛玻璃「元素块」（卡片）的两个全局旋钮 —— 都下发到 .main-content 上的 CSS 变量，
+   由 main-v6.css / avatar-v6.css 里各条 background / backdrop-filter 去乘：
+       --card-alpha  卡片底色透明度倍数   1.00 = 当前观感（缺省）→ 0.00 = 完全透明
+       --card-blur   毛玻璃模糊强度倍数   1.00 = 当前观感（缺省）→ 0.00 = 完全不模糊
+
+   ▍数据位置（2026-09-30 契约 v3，用户 / 公会一致）：avatar_box['glassmorphismCard']，
+     是个**槽位形状**的对象，两个值是两个**具名键**放在 attrs 里（data 留空 null）：
+         { status: 1, data: null, attrs: { alpha: "AAA", blur: "BBB" } }
+         alpha = 卡片底色透明度 0-100，blur = 模糊强度 0-200
+     改造前这两值是塞在 data 里的一个打包串（"AAA-BBB"），v3 起拆成具名键
+     （结构化参数不该塞进一个字符串里）；旧的 `card: {dark, blur}` 写法更早已废弃。
+   ▍**status 不参与渲染**：服务端只是复用槽位形状存这两个参数。唯一的门槛是**有海报** ——
+     没海报时主 JS 会把卡片整套换成实色（见 Template/main-v6.js 的浅色主题兜底），
+     旋钮在那时没有任何意义。
+   ▍CSS 侧一律写 var(--card-alpha, 1) —— 这里不输出时也是 1（= 现状）。
+     反过来说，**这里绝不能输出空串或畸形值**：var() 拿到非法值会让整条
+     background / backdrop-filter 声明在「计算值阶段」失效（背景直接变透明、
+     模糊直接没了），而且不报错。所以必须先夹取、再用「整数 + 两位小数」拼成
+     合法数字 —— 沿用上面 poster_mask 的写法。
+   与用户侧 partials/user-v6-macros.html 同源，改一边记得改另一边。 #}
+{%- set gc_box = avatar_box['glassmorphismCard'] if avatar_box['glassmorphismCard'] is defined and avatar_box['glassmorphismCard'] else {} -%}
+{%- set gc_attrs = gc_box['attrs'] if gc_box['attrs'] is defined and gc_box['attrs'] else {} -%}
+{# ▍取值一律走 `| int(缺省)` 而不是裸 `| int`：两者对「字段在但值是 null」
+   （JSON 的 null / Python 的 null）和「值不是数字字符串」的处理天差地别 ——
+   裸 int 会把它们都变成 0，而 blur 的缺省是 100，0 就等于「把模糊全关掉」，
+   一个 null 就能让页面糊度跑偏。带缺省的写法会回落到各自的缺省值。
+   ▍dget 的缺省给空串：键缺席时落到 `'' | int(缺省)`，正好回到各自的缺省值。
+   ▍缺段 / 脏串一律回落缺省：'abc' → int 认不出来 → 0 / 100。
+   ▍服务端把这个键叫 alpha，但它的方向是「透明度」（000 = 不透明 = 卡片底色最实），
+   与 CSS 变量 --card-alpha（不透明度）相反 —— 所以下面要 100 - 这一次换算，
+   变量名也刻意分成 card_fade（接口值）/ card_alpha（CSS 值）。 #}
+{%- set card_fade_pct = [[(dget(gc_attrs, 'alpha', '') | int(0)), 0] | max, 100] | min -%}
+{%- set card_blur_pct = [[(dget(gc_attrs, 'blur', '') | int(100)), 0] | max, 200] | min -%}
+{%- set card_alpha_pct = 100 - card_fade_pct -%}
+{%- set card_alpha_frac = '%02d' | format((card_alpha_pct % 100) | int) -%}
+{%- set card_alpha = (card_alpha_pct // 100) | int ~ '.' ~ card_alpha_frac -%}
+{%- set card_blur_frac = '%02d' | format((card_blur_pct % 100) | int) -%}
+{%- set card_blur = (card_blur_pct // 100) | int ~ '.' ~ card_blur_frac -%}
+<style>
+    {% if poster and poster_img and poster_img['status'] > 0 %}
+    /* 大背景图拆到 ::before 这一层承载，**不能**把 opacity 加在 .main-content 上 ——
+       那会把整页内容（文字、毛玻璃卡片）一起变淡。
+       两个图层：先列的同尺寸遮罩（黑色，alpha = 1 - 不透明度），再列背景图。
+       遮罩的意义是保证「不透明白景图」时观感与从前完全一致（从前是 url 上直接套
+       linear-gradient(rgba(0,0,0,.5), ...) 压暗一半），背景图越淡遮罩也越小。
+       同一元素上单值的 background-repeat / position / size 会套用到所有图层，
+       所以这里写一次即可；伪元素盖不住内容（无 z-index 的 ::before 在内容之下）。 */
+    .main-content {
+        position: relative;
+        /* 毛玻璃元素块的全局旋钮（见上面的 card 注释）。
+           消费方在 main-v6.css / avatar-v6.css —— 每条 background 乘 --card-alpha、
+           每条 backdrop-filter 乘 --card-blur，这里只负责把值发下来。 */
+        --card-alpha: {{ card_alpha }};
+        --card-blur: {{ card_blur }};
+    }
+
+    .main-content::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        opacity: {{ poster_opacity }}%;
+        background:
+            linear-gradient(rgba(0, 0, 0, {{ poster_mask }}),
+                            rgba(0, 0, 0, {{ poster_mask }})),
+            url("{{ poster_img['data'] }}") no-repeat;
+        /* 横向恒为 center（裁剪器拖出来的是「只在预览生效」的 crop，模板不读）；
+           纵向固定贴顶（poster_pos_y 恒为 0，理由见上面的注释）。
+           两个值都是长手属性，会一起套用到遮罩层与图片层。 */
+        background-position: center {{ poster_pos_y }}%;
+        background-size: cover;
+    }
+    {% endif %}
+
+    {% if color_name and color_name['status'] > 0 %}
+    .mirage-text {
+        background: {{ color_name['data'] }};
+        background-size: 200% 200%;
+        color: transparent;
+        -webkit-background-clip: text;
+        background-clip: text;
+    }
+    {% endif %}
+
+    .page-header {
+        {% if banner and banner['status'] > 0 %}
+        background: url("{{ banner['data'] }}") no-repeat;
+        {% endif %}
+        background-position: center;
+        background-size: 100%;
+    }
+
+    .avatar-header {
+        {% if avatar_status > 0 %}
+        /* 单图。旧契约这里还分过一支：status == 2（赛季段位徽章）要「底座 + 徽章本体」
+           两张叠放（底座 = 同一地址把文件名里的 '-' 换成 '_'）。那套随赛季段位头像
+           整体废弃（见文件头），不再有第二张图，也不用再动 rsplit1。 */
+        background-image: url("{{ avatar_img['data'] }}");
+        {% endif %}
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: 100%;
+    }
+</style>
+{% endmacro %}
+
+{% macro info_header(register=true) %}
+{%- set u = data -%}
+{%- set avatar_box = u['avatar'] if u['avatar'] is defined and u['avatar'] else {} -%}
+{%- set banner = avatar_box['banner'] if avatar_box['banner'] is defined else none -%}
+{%- set avatar_img = avatar_box['avatar'] if avatar_box['avatar'] is defined else none -%}
+{%- set color_name = avatar_box['colorName'] if avatar_box['colorName'] is defined else none -%}
+{# 头像槽位语义（与 info_header_style 里取图那段同源，改一边记得改另一边）：
+     - status == 0（含槽位缺席 / status 缺失）→ 整块隐藏，信息列左移接管这块位置
+       （见 avatar-v6.css 的 .no-avatar）；公会接口没有 dogTag 可以兜底；
+     - status > 0 → 显示 avatar.data（v3 起值域只剩 0/1）。
+   ▍旧契约的 `status == 2`（赛季段位头像 / 军团战徽章）已随服务端一并废弃：
+     那套要再叠一层底座、并在中间盖 avatarText，现在整体删除（见文件头）。 #}
+{%- set avatar_status = (avatar_img['status'] | int) if avatar_img and avatar_img['status'] is defined else 0 -%}
+{%- set hide_avatar = avatar_status == 0 -%}
+{%- set name = u['name'] -%}
+{%- set tag = u['tag'] or '' -%}
+{%- set tag_color = u['colorRgb'] or '#b3b3b3' -%}
+{%- set uid = u['clanId'] -%}
+{# 公会接口的建号时间是**毫秒**，统一成秒再交给 localtime #}
+{%- set created = (u['createdAt'] | int) / 1000 -%}
+{%- set server = server_cn(u['server']) -%}
+{%- set banner_attrs = banner['attrs'] if banner and banner['attrs'] is defined else {} -%}
+{%- set banner_dark = (dget(banner_attrs, 'dark', 0) | int) == 1 -%}
+{# ▍banner_dark 只看 dark 值本身，**不带 status > 0 条件**（与用户侧同源）。
+   曾经是 `banner['status'] > 0 and dget(banner, 'dark') == 1`，
+   结果「关掉小背景图显示开关」会连带把深色白字也取消 ——
+   但 status 管背景图显不显示、dark 管文字黑/白，是两个独立设置，
+   临时关掉背景图不该把深色设置一并丢掉。
+   ▍2026-09-30 契约 v3：dark 从顶层挪进 `banner.attrs.dark`（值口径不变，仍是 "0"/"1"）。 #}
+{# 有无个性颜色：判据必须与 info_header_style 里 .mirage-text 的取色条件（status > 0）一致 ——
+   它们描述的是同一件事「这个名字有没有颜色」。改判据前先确认两边仍然同步。 #}
+{%- set has_color_name = color_name and color_name['status'] > 0 -%}
+{# ---------- 没有头像时，用 tag 生成 BA 风格 logo 顶掉头像位 ----------
+   公会接口 avatar.avatar.status == 0（含槽位缺席）时，以前是整块隐藏、信息列左移；
+   现在改成：把 tag（**不带 []**，[] 是下面军团名那行自己加的）喂给 BA 风格文字 logo
+   （组件样式 ba-logo-v6.css，模板 link 在 wws-clan-v6.html），放进原来的 250×250 头像盒里。
+   tag 取不到（空串）时才退回原来的整块隐藏。
+
+   分割：按字符数从中间切，前半 floor(n/2)、后半 ceil(n/2)，两段都不会是空的。
+   游戏的军团标签本身就限死 2~5 个字，所以实际只有这四种：
+     2 字 → 1/1、3 字 → 1/2、4 字 → 2/2、5 字 → 2/3（如 TIF-K → TI / F-K）。
+   长度按**字符数**算（一个汉字算 1 个），不按字节、也不按视觉宽度。
+   超过 5 字（理论上不会有）不截断，照旧自动缩小。
+   字号：头像盒 250×250、四周留 25px，按两条约束取小：
+     横向 —— 按「看得见的画面」宽度（见下面的 ba_ink_l / ba_ink_r）；
+     纵向 —— 画面高度约 2em（徽记比文字高得多，是它顶天立地）。
+   字多就自动缩小，保证不会冲出圆角头像盒。 #}
+{%- set show_avatar_logo = hide_avatar and tag -%}
+{%- if show_avatar_logo -%}
+    {%- set hide_avatar = false -%}
+{%- endif -%}
+{%- set avatar_logo_cut = (tag | length) // 2 -%}
+{%- set avatar_logo_left = tag.slice(0, avatar_logo_cut) -%}
+{%- set avatar_logo_right = tag.slice(avatar_logo_cut) -%}
+{# 两个词的宽度（em）交给 render_helpers.ba_text_em 按 Microsoft YaHei Bold 的实测字表算。
+   不要退回「拉丁字一律 0.62em」那种均匀估算：W / M 实测 1.08 / 1.03em，
+   估窄了 logo 就会冲出方框（WWWWWW 这种 tag 尤其明显）。 #}
+{%- set ba_l = ba_text_em(avatar_logo_left) -%}
+{%- set ba_r = ba_text_em(avatar_logo_right) -%}
+{# 「看得见的画面」范围（em，从两个词的起点算起），只用来定字号：
+     左缘 0.08  首字的左侧留白；
+     右缘 = max(右词宽 + 0.29, 交接点 + 1.86) - 0.07
+            右词那项里的 0.29 是倾斜（skewX -21.8°）把字面上沿往右推出来的量；
+            1.86 是徽记（halo / 十字）画到交接点右侧的墨迹；-0.07 是末字右侧留白。
+   徽记左右负 margin 正好抵消，所以它不占布局宽度，但画面会往右伸出去 ——
+   居中基准是「两个词的方框」（也就是文字），字号得按伸出去的那一截算，
+   不然徽记会顶出方框。这几个常数是拿 Chrome 截图逐像素量出来的，换字体要重测。 #}
+{%- set ba_ink_l = 0.08 -%}
+{%- set ba_ink_r = ba_l + (ba_r + 0.29 if ba_r + 0.29 > 1.86 else 1.86) - 0.07 -%}
+{# 横向：文字方框居中后，画面往右伸 (右缘 - 半宽)、往左伸 (半宽 - 左缘)，大的那头说了算，
+   左右各留 25px（所以是 100 而不是 125）。 #}
+{%- set ba_half_w = (ba_l + ba_r) / 2 -%}
+{%- set ba_reach_r = ba_ink_r - ba_half_w -%}
+{%- set ba_reach_l = ba_half_w - ba_ink_l -%}
+{%- set avatar_logo_fit_w = (100 / (ba_reach_r if ba_reach_r > ba_reach_l else ba_reach_l)) | int -%}
+{# 纵向：文字居中后，徽记往基线**上方**伸 1.43em（画面总高约 1.94em，但相对文字中心是上多下少），
+   同样留 25px → 100 / 1.43 ≈ 69px，这就是字号的实际上限。 #}
+{%- set avatar_logo_fit_h = (100 / 1.43) | int -%}
+{%- set avatar_logo_size = avatar_logo_fit_w if avatar_logo_fit_w < avatar_logo_fit_h else avatar_logo_fit_h -%}
+{# 两个上限取小的那个就是字号：横向那条管宽 tag，纵向那条管所有 tag（≈69px 封顶）。
+   不再另外封 84px 的顶：84 只是组件默认值，而这里横向是拿「文字居中」当基准算的，
+   再压一层 84 会让窄 tag 白白小一圈。 #}
+{# 布局宽度显式钉成两个词的 advance 之和（--ba-logo-w）：
+   短 tag 时浏览器会把词方框撑得比文字宽（负 margin 的徽记搅的），
+   不钉死这个宽度，flex 的居中基准就不是文字，文字也就不在方框正中了。 #}
+{%- set avatar_logo_w = ba_l + ba_r -%}
+<div class="page-header{% if banner_dark %} dark-banner{% endif %}">
+    <div class="masking-header{% if hide_avatar %} no-avatar{% endif %}">
+        <div class="avatar-header{% if show_avatar_logo %} has-avatar-logo{% endif %}">{% if show_avatar_logo %}{# 三个 span 必须紧贴，中间不能有换行 / 空格（组件靠 font-size:0 兜底，但紧凑更保险） #}<span class="ba-logo" style="--ba-size: {{ avatar_logo_size }}px; --ba-logo-w: {{ '%.3f' | format(avatar_logo_w) }};"><span class="ba-logo__left">{{ avatar_logo_left }}</span>{{ ba_logo_mark() }}<span class="ba-logo__right">{{ avatar_logo_right }}</span></span>{% endif %}
+        </div>
+        <div class="clan-user-server">
+            <div class="user-info{% if not has_color_name %} no-color-name{% endif %}">
+                {% if tag %}
+                    <span style="color: {% if banner_dark %}#ffffff{% else %}{{ tag_color }}{% endif %};">[{{ tag }}]</span>
+                {% endif %}
+                <span class="mirage-text">{{ name }}</span></div>
+            {# 公会接口没有 sign 槽位，这列恒为三行：军团 ID / 所属服务器 / 注册时间 #}
+            <div class="user-account">Clan Id: {{ uid }}</div>
+            <div class="user-server">所属服务器: {{ server }}</div>
+            {% if register %}
+                <div class="user-sign-time">注册时间: {{ time.strftime('%Y-%m-%d %H:%M', time.localtime(int(abs(created)))) }}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+{# BA 风格 logo 的徽记（光晕弧 + 十字）静态 SVG，矢量复刻自 Temp/ba-logo/index.html 的 MARK_SVG。
+   只在「公会无头像 → 用 tag 生成 logo」这一处用（见 info_header 的 show_avatar_logo）。
+   ⚠ 两个 <svg> 和外面的 span 必须写在同一行、中间不留空白：.ba-logo 用 font-size:0 吃掉空白，
+     但换行会多出一个文本节点，位置就不准了。 #}
+{% macro ba_logo_mark() %}<span class="ba-logo__mark" aria-hidden="true"><svg class="ba-logo__halo" viewBox="0 0 500 500"><path fill="currentColor" transform="translate(458,193)" d="M0 0 C4.6 12.7 5.5 18.6 0 31 C-8.7 31.6 -8.7 31.6 -17 31 C-15 27 -15 27 -11 21 C-2.6 -4.1 -30.5 -27.1 -47.2 -40.7 C-105.5 -82.7 -223.9 -139.5 -296 -103 C-306.3 -95 -310.3 -87.7 -308.1 -74.2 C-294.1 -31.8 -242.9 -9.5 -206 9 C-207 10.3 -208 11.6 -209 13 C-251.4 -2.9 -308.7 -36.5 -322 -83 C-319.6 -104.9 -304.6 -112.1 -285 -117 C-196.8 -130.5 -45.6 -81.7 0 0 Z"/></svg><svg class="ba-logo__cross" viewBox="0 0 500 500"><path fill="currentColor" transform="translate(361,40)" d="M0,0 L1,2 L-10,25 L-24,54 L-36,79 L-47,102 L-41,104 L-3,122 L31,138 L61,152 L97,169 L108,174 L105,175 L25,143 L-6,131 L-46,115 L-55,112 L-57,117 L-76,149 L-93,177 L-112,209 L-129,237 L-148,269 L-165,297 L-182,325 L-183,323 L-170,298 L-158,276 L-141,244 L-127,218 L-112,190 L-97,162 L-82,134 L-68,108 L-67,105 L-73,103 L-112,85 L-145,70 L-177,55 L-210,40 L-251,21 L-253,19 L-248,20 L-212,34 L-172,50 L-109,75 L-61,94 L-58,94 L-42,68 L-28,45 L-15,24 L-1,1 Z"/></svg></span>{% endmacro %}
+

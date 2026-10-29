@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+    <meta charset="utf-8">
+    <title></title>
+    <link href="{{ template_path.as_uri() }}/main-v6.css" rel="stylesheet" type="text/css">
+    <link href="{{ template_path.as_uri() }}/avatar-v6.css" rel="stylesheet" type="text/css">
+</head>
+<style>
+    body {
+        width: 2160px;
+        background: linear-gradient(180deg, #f6f4ff 0%, #eef1f8 100%);
+    }
+
+    * {
+        padding: 0;
+        margin: 0;
+    }
+
+    .flex-2 {
+        flex: 2;
+    }
+
+    .flex-3 {
+        flex: 3;
+    }
+
+    .flex-5 {
+        flex: 5;
+    }
+
+    .flex-6 {
+        flex: 6;
+    }
+
+    .flex-10 {
+        flex: 10;
+    }
+
+    .main-content {
+        width: 2160px;
+        margin: 0 auto;
+        font-size: 30px;
+        font-family: "Microsoft YaHei Bold", "Microsoft YaHei", sans-serif;
+        font-weight: bold;
+    }
+
+    .page-box {
+        width: 2160px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .ship-level {
+        display: inline-block;
+        text-align: center;
+        margin-right: 60px;
+    }
+
+    .season-name {
+        display: inline-block;
+    }
+
+    /* ===== 统一标题头 ===== */
+    .page-header {
+        margin: 40px 50px 30px;
+        height: 120px;
+        line-height: 120px;
+        text-align: center;
+        font-size: 44px;
+        font-weight: bold;
+        color: #ffffff;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+        box-shadow: 0 4px 16px rgba(106, 17, 203, 0.25);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .rank-header {
+        margin: 0 50px;
+        display: flex;
+        text-align: center;
+        color: #4a4a4a;
+        font-weight: normal;
+        height: 100px;
+        line-height: 100px;
+        border-bottom: 5px solid rgba(180, 160, 230, 0.8);
+        background: rgba(245, 240, 255, 0.5);
+        border-radius: 16px 16px 0 0;
+    }
+
+    .rank-header .hest-frag,
+    .rank-header .ar-frag,
+    .rank-header .max-ar-frag {
+        line-height: 50px;
+    }
+
+    .rank-item {
+        margin: 0 50px;
+        display: flex;
+        text-align: center;
+        height: 80px;
+        line-height: 80px;
+    }
+
+    .rank-item:nth-child(odd) {
+        background: rgba(180, 160, 230, 0.12);
+    }
+
+    .rank-item:last-child {
+        border-radius: 0 0 16px 16px;
+    }
+
+    .clan-name {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    .footer {
+        margin-top: 30px;
+        text-align: center;
+        font-weight: bold;
+        font-size: 24px;
+        color: #909399;
+        margin-bottom: 20px;
+    }
+
+    .group-lev {
+        padding-left: 30px;
+        padding-right: 0;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .group-lev > div:nth-child(1) {
+        display: flex;
+    }
+
+    .group-lev > div:nth-child(1) > div {
+        width: 10px;
+        height: 50px;
+        margin-top: 15px;
+        background-color: red;
+        margin-right: 5px;
+        border-radius: 10px;
+    }
+</style>
+<body>
+<div class="main-content">
+    <div class="page-box">
+        <div class="page-header">
+            <div class="season-name">
+                {{ data['data']['append'] }}赛季 {{ data['server']|upper }}
+            </div>
+        </div>
+        <div class="rank-header">
+            <div class="ranks flex-2 col">排名</div>
+            <div class="server flex-2 col">所属服务器</div>
+            <div class="clan-name flex-10 col">公会</div>
+            <div class="league flex-3 col">段位</div>
+            <div class="battles flex-3 col">总场次</div>
+            <div class="time flex-3 col">最后战斗时间</div>
+        </div>
+        {% for rank in data['data']['records'] %}
+        <div class="rank-item">
+            <div class="ranks flex-2 col">{{ rank['rank'] }}</div>
+            <div class="server flex-2 col">{{ rank['server'] }}</div>
+            <div class="clan-name flex-10 col"><span style="color: {{rank['color']}};">[{{ rank['tag'] }}]</span>{{ rank['name'] }}</div>
+            <div class="league flex-3 col">
+                <div class="group-lev">
+                    <div style="margin-left:50px;">
+                        <div style="background-color:{{ rank['leagueName']['color'] }};"></div>
+                        <span>{{ rank['leagueName']['buff'] }}{{ rank['divisionName'] }}</span>
+                        <span>&nbsp;{{ rank['divisionRating'] }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="league flex-3 col">{{ rank['battlesCount'] }}</div>
+            <div class="time flex-3 col">{{ time.strftime('%Y-%m-%d',time.localtime(abs(rank['lastBattleAt']/1000)))}}</div>
+        </div>
+        {% endfor %}
+
+        <div class="footer">
+            <p>频道搜索"战舰世界-yuyuko"即可使用稳定的腾讯官方机器人~</p>
+            <p>©github:wows-yuyuko</p>
+        </div>
+
+        <div style="margin: 0 50px; border-bottom: 5px solid rgba(180, 160, 230, 0.6); margin-bottom:20px;"></div>
+    </div>
+</div>
+</body>
+
+<script>
+    document.querySelectorAll(".server").forEach(e => {
+        if (e.innerText == "asia") {
+            e.style.color = "#92D050";
+            e.innerText = "ASIA";
+        } else if (e.innerText == "cn") {
+            e.style.color = "#BF9000";
+            e.innerText = "CN";
+        } else if (e.innerText == "eu") {
+            e.style.color = "#009664";
+            e.innerText = "EU";
+        } else if (e.innerText == "na") {
+            e.style.color = "#6872C4";
+            e.innerText = "NA";
+        } else if (e.innerText == "ru") {
+            e.style.color = "#FF0000";
+            e.innerText = "RU";
+        }
+    })
+</script>
+</html>

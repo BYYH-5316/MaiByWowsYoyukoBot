@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+    <meta charset="utf-8">
+    <title></title>
+    <link href="{{ template_path.as_uri() }}/main-v6.css" rel="stylesheet" type="text/css">
+    <link href="{{ template_path.as_uri() }}/avatar-v6.css" rel="stylesheet" type="text/css">
+</head>
+{% from 'partials/user-v6-macros.html' import info_header_style, info_header with context %}
+{% from 'partials/common-v6-macros.html' import info_pr, footer_box with context %}
+{{ info_header_style() }}
+{% set show_pr = data['userInfo']['prStatus'] != 1 %}
+<body>
+<div class="main-content">
+    <div class="page-box">
+
+        {# ==================== 头部 ==================== #}
+        {{ info_header(register=true) }}
+
+        {# ==================== PR 条（v2 结构顶层 prInfo） ==================== #}
+        {% if show_pr and data['prInfo']['value'] > 0 %}
+        {{ info_pr(data['prInfo']) }}
+        {% endif %}
+
+        {# ==================== 时间信息 ==================== #}
+        <div class="recnet-time">
+            <span class="time-item">最后战斗时间：
+                {% if data['lastBattleTime'] > 0 %}
+                    {{ time.strftime('%Y-%m-%d %H:%M', time.localtime(int(abs(data['lastBattleTime'])))) }}
+                {% else %}N/A{% endif %}
+            </span>
+        </div>
+
+        {# ==================== 核心数据 ==================== #}
+        {% set main = data['battleTypeInfo']['PVP'] if data['battleTypeInfo']['PVP']['battle'] else data['battleTypeInfo']['RANK_SOLO'] %}
+        <div class="overview-change">
+            <div class="overview-change-item">
+                <div class="item-top one-background-color">
+                    <div class="stat-label">场次</div>
+                    <div class="stat-value">{{ '{:,}'.format(main['shipInfo']['battleInfo']['battle']) }}</div>
+                </div>
+                <div class="item-bottom">
+                    <div class="bottom-mini-item one-background-color">
+                        <div class="mini-label">加成经验</div>
+                        <div class="mini-value">{{ '{:,}'.format(main['shipInfo']['avgInfo']['xp']) }}</div>
+                    </div>
+                    <div class="bottom-mini-item one-background-color">
+                        <div class="mini-label">命中率</div>
+                        <div class="mini-value">{{ '%.2f' | format(main['shipInfo']['hitRatioInfo']['ratioMain']) }}%</div>
+                    </div>
+                </div>
+            </div>
+            <div class="overview-change-item">
+                <div class="item-top one-background-color">
+                    <div class="stat-label">胜率</div>
+                    <div class="stat-value" style="color: {{ main['shipInfo']['avgInfo']['winsData']['color'] }};">{{ '%.2f' | format(main['shipInfo']['avgInfo']['win']) }}%
+                    </div>
+                </div>
+                <div class="item-bottom">
+                    <div class="bottom-mini-item one-background-color">
+                        <div class="mini-label">存活率</div>
+                        <div class="mini-value">{{ '%.1f' | format(main['shipInfo']['battleInfo']['survived'] / main['shipInfo']['battleInfo']['battle'] * 100 if main['shipInfo']['battleInfo']['battle'] else 0) }}%</div>
+                    </div>
+                    <div class="bottom-mini-item one-background-color">
+                        <div class="mini-label">击落</div>
+                        <div class="mini-value">{{ '%.2f' | format(main['shipInfo']['avgInfo']['planesKilled']) }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="overview-change-item">
+                <div class="item-top one-background-color">
+                    <div class="stat-label">场均</div>
+                    <div class="stat-value" style="color: {{ main['shipInfo']['avgInfo']['damageData']['color'] }};">{{ '{:,}'.format(main['shipInfo']['avgInfo']['damage']) }}
+                    </div>
+                </div>
+                <div class="item-bottom">
+                    <div class="bottom-mini-item one-background-color">
+                        <div class="mini-label">击杀</div>
+                        <div class="mini-value">{{ '%.2f' | format(main['shipInfo']['avgInfo']['frags']) }}</div>
+                    </div>
+                    <div class="bottom-mini-item one-background-color">
+                        <div class="mini-label">KD</div>
+                        <div class="mini-value">{{ '%.2f' | format(main['shipInfo']['avgInfo']['kd']) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ==================== 战舰类型 ==================== #}
+        <div class="random-header one-background-color">战舰类型</div>
+        <div class="information-body data-battle-type">
+            <div class="information-col">
+                <div class="information-col-item">类型</div>
+                <div class="information-col-item">场次</div>
+                <div class="information-col-item">胜率</div>
+                {% if show_pr %}<div class="information-col-item">PR</div>{% endif %}
+                <div class="information-col-item">场均</div>
+                <div class="information-col-item">击杀</div>
+                <div class="information-col-item">存活</div>
+                <div class="information-col-item">命中</div>
+            </div>
+            {% set ship_types = [
+                ['Battleship', '战列舰', 'ratioMain'],
+                ['Cruiser', '巡洋舰', 'ratioMain'],
+                ['Destroyer', '驱逐舰', 'ratioMain'],
+                ['AirCarrier', '航母', 'ratioMain'],
+                ['Submarine', '潜艇', 'ratioTpd']
+            ] %}
+            {% for st, st_name, ratio_key in ship_types %}
+                {% set info = data['shipTypeInfo'][st] if st in data['shipTypeInfo'] else none %}
+                {% if info and info['PVP']['battle'] %}
+                    <div class="information-col">
+                        <div class="information-col-item type-name">{{ st_name }}</div>
+                        <div class="information-col-item">{{ '{:,}'.format(info['PVP']['shipInfo']['battleInfo']['battle']) }}</div>
+                        <div class="information-col-item" style="color: {{ info['PVP']['shipInfo']['avgInfo']['winsData']['color'] }};">{{ '%.2f' | format(info['PVP']['shipInfo']['avgInfo']['win']) }}%</div>
+                        {% if show_pr %}
+                            <div class="information-col-item" style="color: {{ info['PVP']['prInfo']['color'] }};">{{ info['PVP']['prInfo']['value'] }}</div>
+                        {% endif %}
+                        <div class="information-col-item" style="color: {{ info['PVP']['shipInfo']['avgInfo']['damageData']['color'] }};">{{ '{:,}'.format(info['PVP']['shipInfo']['avgInfo']['damage']) }}</div>
+                        <div class="information-col-item">{{ '%.2f' | format(info['PVP']['shipInfo']['avgInfo']['frags']) }}</div>
+                        <div class="information-col-item">{{ '%.1f' | format(info['PVP']['shipInfo']['battleInfo']['survived'] / info['PVP']['shipInfo']['battleInfo']['battle'] * 100 if info['PVP']['shipInfo']['battleInfo']['battle'] else 0) }}%</div>
+                        <div class="information-col-item">{{ '%.2f' | format(info['PVP']['shipInfo']['hitRatioInfo'][ratio_key]) }}%</div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        {# ==================== 战斗类型 ==================== #}
+        <div class="random-header one-background-color">战斗类型</div>
+        <div class="information-body data-battle-type">
+            <div class="information-col">
+                <div class="information-col-item">类型</div>
+                <div class="information-col-item">场次</div>
+                <div class="information-col-item">胜率</div>
+                {% if show_pr %}<div class="information-col-item">PR</div>{% endif %}
+                <div class="information-col-item">场均</div>
+                <div class="information-col-item">击杀</div>
+                <div class="information-col-item">存活</div>
+                <div class="information-col-item">命中</div>
+            </div>
+            {% for bt, bt_name in [['PVP_SOLO', '单野'], ['PVP_DIV2', '自行车'], ['PVP_DIV3', '三轮车'], ['RANK_SOLO', '排位']] %}
+                {% set info = data['battleTypeInfo'][bt] %}
+                {% if info['battle'] %}
+                    <div class="information-col">
+                        <div class="information-col-item type-name">{{ bt_name }}</div>
+                        <div class="information-col-item">{{ '{:,}'.format(info['shipInfo']['battleInfo']['battle']) }}</div>
+                        <div class="information-col-item" style="color: {{ info['shipInfo']['avgInfo']['winsData']['color'] }};">{{ '%.2f' | format(info['shipInfo']['avgInfo']['win']) }}%</div>
+                        {% if show_pr %}
+                            <div class="information-col-item" style="color: {{ info['prInfo']['color'] }};">{{ info['prInfo']['value'] }}</div>
+                        {% endif %}
+                        <div class="information-col-item" style="color: {{ info['shipInfo']['avgInfo']['damageData']['color'] }};">{{ '{:,}'.format(info['shipInfo']['avgInfo']['damage']) }}</div>
+                        <div class="information-col-item">{{ '%.2f' | format(info['shipInfo']['avgInfo']['frags']) }}</div>
+                        <div class="information-col-item">{{ '%.1f' | format(info['shipInfo']['battleInfo']['survived'] / info['shipInfo']['battleInfo']['battle'] * 100 if info['shipInfo']['battleInfo']['battle'] else 0) }}%</div>
+                        <div class="information-col-item">{{ '%.2f' | format(info['shipInfo']['hitRatioInfo']['ratioMain']) }}%</div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        {# ==================== 最高记录 ==================== #}
+        <div class="random-header one-background-color">最高记录</div>
+        <div class="frag-data">
+            <div class="frag-item one-background-color">
+                <div class="frag-key">伤害</div>
+                <div class="frag-value">{{ '{:,}'.format(data['battleTypeInfo']['PVP']['shipInfo']['maxInfo']['maxDamageDealt']['value']) }}</div>
+            </div>
+            <div class="frag-item one-background-color">
+                <div class="frag-key">潜在</div>
+                <div class="frag-value">{{ '{:,}'.format(data['battleTypeInfo']['PVP']['shipInfo']['maxInfo']['maxTotalAgro']['value']) }}</div>
+            </div>
+            <div class="frag-item one-background-color">
+                <div class="frag-key">侦查</div>
+                <div class="frag-value">{{ '{:,}'.format(data['battleTypeInfo']['PVP']['shipInfo']['maxInfo']['maxScoutingDamage']['value']) }}</div>
+            </div>
+            <div class="frag-item one-background-color">
+                <div class="frag-key">击杀</div>
+                <div class="frag-value">{{ '{:,}'.format(data['battleTypeInfo']['PVP']['shipInfo']['maxInfo']['maxFrags']['value']) }}</div>
+            </div>
+            <div class="frag-item one-background-color">
+                <div class="frag-key">飞机数</div>
+                <div class="frag-value">{{ '{:,}'.format(data['battleTypeInfo']['PVP']['shipInfo']['maxInfo']['maxPlanesKilled']['value']) }}</div>
+            </div>
+            <div class="frag-item one-background-color">
+                <div class="frag-key">经验</div>
+                <div class="frag-value">{{ '{:,}'.format(data['battleTypeInfo']['PVP']['shipInfo']['maxInfo']['maxXp']['value']) }}</div>
+            </div>
+        </div>
+
+        {# ==================== 等级图表（v2 结构 levelInfo 双轴） ==================== #}
+        <div class="chart-box one-background-color">
+            <div class="chart-bar"></div>
+        </div>
+
+        {{ footer_box() }}
+    </div>
+</div>
+</body>
+
+{# echarts 优先用模板目录里那份（截图服务在 file:// 下跑，离线也得能出图）。
+   ▍别写 pathlib 的 `template_path / "echarts.js"`：那在 Jinja 下**恒真**（拼出来的是对象，
+     不查文件在不在），在 JS/Nunjucks 下**恒假**（对象 / 字符串 = NaN）—— 静默走错分支、
+     页面上不报错，只是 echarts 换成了 CDN。文件在不在只有 Python 侧知道，
+   所以判断走 asset_exists()（清单来自 js_render.build_payload 的 assets）。 #}
+{% if asset_exists("echarts.js") %}
+    <script src="{{ template_path.as_uri() }}/echarts.js"></script>
+{% else %}
+    <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.3.3/echarts.min.js"></script>
+{% endif %}
+<script src="{{ template_path.as_uri() }}/main-v6.js" type="text/javascript"></script>
+<script>
+    window.onload = function () {
+        drawLevelChart();
+    };
+
+    function drawLevelChart() {
+        var chart = echarts.init(document.querySelector('.chart-bar'));
+        var tierBattle = [
+            {% for lv in range(1, 12) %}{{ data['levelInfo'][lv|string]['PVP']['shipInfo']['battleInfo']['battle'] }}{% if not loop.last %}, {% endif %}{% endfor %}
+        ];
+        var tierWin = [
+            {% for lv in range(1, 12) %}{% set info = data['levelInfo'][lv|string]['PVP'] %}{% if info['shipInfo']['battleInfo']['battle'] > 0 %}{{ '%.2f' | format(info['shipInfo']['avgInfo']['win']) }}{% else %}null{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+        ];
+        chart.setOption({
+            animation: false,
+            tooltip: {trigger: 'axis'},
+            legend: {
+                data: ['场次', '胜率'],
+                top: 8,
+                itemWidth: 18,
+                itemHeight: 12,
+                textStyle: {fontSize: 18, color: '#3c3c4c'}
+            },
+            grid: {left: 70, right: 80, top: 60, bottom: 30},
+            xAxis: {
+                type: 'category',
+                data: ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', '★'],
+                axisLabel: {fontSize: 20}
+            },
+            yAxis: [
+                {
+                    type: 'value',
+                    name: '场次',
+                    nameTextStyle: {fontSize: 16},
+                    axisLabel: {fontSize: 18}
+                },
+                {
+                    type: 'value',
+                    name: '胜率(%)',
+                    nameTextStyle: {fontSize: 16},
+                    min: 0,
+                    max: 100,
+                    splitLine: {show: false},
+                    axisLabel: {fontSize: 18, formatter: '{value}%'}
+                }
+            ],
+            series: [
+                {
+                    name: '场次',
+                    type: 'bar',
+                    data: tierBattle,
+                    barMaxWidth: 56,
+                    label: {show: true, position: 'top', fontSize: 15, color: '#5a5f6b'},
+                    itemStyle: {
+                        color: 'rgba(214, 236, 251, 0.55)',
+                        borderColor: '#9FB8FF',
+                        borderWidth: 1.5,
+                        borderRadius: [6, 6, 0, 0]
+                    }
+                },
+                {
+                    name: '胜率',
+                    type: 'line',
+                    yAxisIndex: 1,
+                    data: tierWin,
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 7,
+                    itemStyle: {color: '#8D67FF'},
+                    lineStyle: {color: '#8D67FF', width: 3},
+                    label: {show: true, position: 'top', fontSize: 14, color: '#8D67FF'}
+                }
+            ]
+        });
+    }
+</script>
+</html>

@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+    <meta charset="utf-8">
+    <title></title>
+    <link href="{{ template_path.as_uri() }}/main-v6.css" rel="stylesheet" type="text/css">
+    <link href="{{ template_path.as_uri() }}/avatar-v6.css" rel="stylesheet" type="text/css">
+</head>
+{% from 'partials/user-v6-macros.html' import info_header_style, info_header with context %}
+{% from 'partials/common-v6-macros.html' import info_pr, footer_box with context %}
+{{ info_header_style() }}
+<body>
+<div class="main-content">
+    <div class="page-box">
+        {{ info_header(register=true) }}
+
+        {% if data['userInfo']['prStatus'] != 1 %}
+        {{ info_pr(data['battleTypeInfo']['PVP']['prInfo'] if data['battleTypeInfo']['PVP']['battle'] else data['battleTypeInfo']['RANK_SOLO']['prInfo']) }}
+        {% endif %}
+
+        <div class="recnet-time">
+            {% if data['activate'] != 0 %}
+                <span>到期时间：</span><span>{{ time.strftime('%Y-%m-%d %H:%M',time.localtime(int(abs(data['activate']/1000)))) }}</span>
+            {% else %}
+                <span>到期时间：</span><span>已过期</span>
+            {% endif %}
+        </div>
+
+        {% if data['battleTypeInfo']['PVP']['battle'] %}
+            <div class="overview-change">
+                <div class="overview-change-item left-item">
+                    <div class="left-item-top item-top one-background-color">
+                        <div class="overview-count-title item-top-top">场次</div>
+                        <div class="overview-count item-top-bottom">{{ data['battleTypeInfo']['PVP']['battleInfo']['battleInfo']['battle'] }}</div>
+                    </div>
+                    <div class="left-item-bottom item-bottom">
+                        <div class="change-avgdmg-box bottom-mini-item-left one-background-color">
+                            <div class="mini-item-top">加成经验</div>
+                            <div class="mini-item-bottom">{{ data['battleTypeInfo']['PVP']['battleInfo']['avgInfo']['xp'] }}</div>
+                        </div>
+                        <div class="change-win-box bottom-mini-item-right one-background-color">
+                            <div class="mini-item-top">命中率</div>
+                            <div class="mini-item-bottom">{{ '%.2f' | format(data['battleTypeInfo']['PVP']['battleInfo']['hitRatioInfo']['ratioMain']) }}%</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="overview-change-item mid-item">
+                    <div class="mid-item-top item-top one-background-color">
+                        <div class="overview-win-title item-top-top">胜率</div>
+                        <div class="overview-win item-top-bottom"
+                             style="color: {{ data['battleTypeInfo']['PVP']['battleInfo']['avgInfo']['winsData']['color'] }};">{{ '%.2f' | format(data['battleTypeInfo']['PVP']['battleInfo']['avgInfo']['win']) }}%
+                        </div>
+                    </div>
+                    <div class="mid-item-bottom item-bottom">
+                        <div class="change-avgdmg-box bottom-mini-item-left one-background-color">
+                            <div class="mini-item-top">存活率</div>
+<div class="mini-item-bottom">{{ '%.1f' | format(data['battleTypeInfo']['PVP']['battleInfo']['battleInfo']['survived'] / data['battleTypeInfo']['PVP']['battleInfo']['battleInfo']['battle'] * 100 if data['battleTypeInfo']['PVP']['battleInfo']['battleInfo']['battle'] else 0) }}%</div>
+                        </div>
+                        <div class="change-win-box bottom-mini-item-right one-background-color">
+                            <div class="mini-item-top">击落</div>
+                            <div class="mini-item-bottom">{{ '%.2f' | format(data['battleTypeInfo']['PVP']['battleInfo']['avgInfo']['planesKilled']) }}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="overview-change-item right-item">
+                    <div class="right-item-top item-top one-background-color">
+                        <div class="overview-avgdmg-title item-top-top">场均</div>
+                        <div class="overview-avgdmg item-top-bottom"
+                             style="color: {{ data['battleTypeInfo']['PVP']['battleInfo']['avgInfo']['damageData']['color'] }};">{{ '{:,}'.format(data['battleTypeInfo']['PVP']['battleInfo']['avgInfo']['damage'] | int) }}</div>
+                    </div>
+                    <div class="right-item-bottom item-bottom">
+                        <div class="overview-kd-box bottom-mini-item-left one-background-color">
+                            <div class="mini-item-top">击杀</div>
+                            <div class="mini-item-bottom">{{ '%.2f' | format(data['battleTypeInfo']['PVP']['battleInfo']['avgInfo']['frags']) }}</div>
+                        </div>
+                        <div class="overview-hit-box bottom-mini-item-right one-background-color">
+                            <div class="mini-item-top">KD</div>
+                            <div class="mini-item-bottom">{{ '%.2f' | format(data['battleTypeInfo']['PVP']['battleInfo']['avgInfo']['kd']) }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <!--否则显示排位-->
+            <div class="overview-change">
+                <div class="overview-change-item left-item">
+                    <div class="left-item-top item-top one-background-color">
+                        <div class="overview-count-title item-top-top">场次</div>
+                        <div class="overview-count item-top-bottom">{{ data['battleTypeInfo']['RANK_SOLO']['battleInfo']['battleInfo']['battle'] }}</div>
+                    </div>
+                    <div class="left-item-bottom item-bottom">
+                        <div class="change-avgdmg-box bottom-mini-item-left one-background-color">
+                            <div class="mini-item-top">加成经验</div>
+                            <div class="mini-item-bottom">{{ data['battleTypeInfo']['RANK_SOLO']['battleInfo']['avgInfo']['xp'] }}</div>
+                        </div>
+                        <div class="change-win-box bottom-mini-item-right one-background-color">
+                            <div class="mini-item-top">命中率</div>
+                            <div class="mini-item-bottom">{{ '%.2f' | format(data['battleTypeInfo']['RANK_SOLO']['battleInfo']['hitRatioInfo']['ratioMain']) }}%</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="overview-change-item mid-item">
+                    <div class="mid-item-top item-top one-background-color">
+                        <div class="overview-win-title item-top-top">胜率</div>
+                        <div class="overview-win item-top-bottom"
+                             style="color: {{ data['battleTypeInfo']['RANK_SOLO']['battleInfo']['avgInfo']['winsData']['color'] }};">{{ '%.2f' | format(data['battleTypeInfo']['RANK_SOLO']['battleInfo']['avgInfo']['win']) }}%
+                        </div>
+                    </div>
+                    <div class="mid-item-bottom item-bottom">
+                        <div class="change-avgdmg-box bottom-mini-item-left one-background-color">
+                            <div class="mini-item-top">存活率</div>
+<div class="mini-item-bottom">{{ '%.1f' | format(data['battleTypeInfo']['RANK_SOLO']['battleInfo']['battleInfo']['survived'] / data['battleTypeInfo']['RANK_SOLO']['battleInfo']['battleInfo']['battle'] * 100 if data['battleTypeInfo']['RANK_SOLO']['battleInfo']['battleInfo']['battle'] else 0) }}%</div>
+                        </div>
+                        <div class="change-win-box bottom-mini-item-right one-background-color">
+                            <div class="mini-item-top">击落</div>
+                            <div class="mini-item-bottom">{{ '%.2f' | format(data['battleTypeInfo']['RANK_SOLO']['battleInfo']['avgInfo']['planesKilled']) }}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="overview-change-item right-item">
+                    <div class="right-item-top item-top one-background-color">
+                        <div class="overview-avgdmg-title item-top-top">场均</div>
+                        <div class="overview-avgdmg item-top-bottom"
+                             style="color: {{ data['battleTypeInfo']['RANK_SOLO']['battleInfo']['avgInfo']['damageData']['color'] }};">{{ '{:,}'.format(data['battleTypeInfo']['RANK_SOLO']['battleInfo']['avgInfo']['damage'] | int) }}</div>
+                    </div>
+                    <div class="right-item-bottom item-bottom">
+                        <div class="overview-kd-box bottom-mini-item-left one-background-color">
+                            <div class="mini-item-top">击杀</div>
+                            <div class="mini-item-bottom">{{ '%.2f' | format(data['battleTypeInfo']['RANK_SOLO']['battleInfo']['avgInfo']['frags']) }}</div>
+                        </div>
+                        <div class="overview-hit-box bottom-mini-item-right one-background-color">
+                            <div class="mini-item-top">KD</div>
+                            <div class="mini-item-bottom">{{ '%.2f' | format(data['battleTypeInfo']['RANK_SOLO']['battleInfo']['avgInfo']['kd']) }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="random-header one-background-color">战斗类型</div>
+        <div class="information-body one-background-color data-battle-type">
+            <div class="information-col ">
+                <div class="information-col-item">类型</div>
+                <div class="information-col-item">场次</div>
+                <div class="information-col-item">胜率</div>
+                {% if data['userInfo']['prStatus'] != 1 %}<div class="information-col-item">PR</div>{% endif %}
+                <div class="information-col-item">场均</div>
+                <div class="information-col-item">击杀</div>
+<div class="information-col-item">存活</div>
+                <div class="information-col-item">命中</div>
+            </div>
+            {% if data['battleTypeInfo']['PVP_SOLO']['battle'] %}
+                <div class="information-col">
+                    <div class="information-col-item">单野</div>
+                    <div class="information-col-item">{{ data['battleTypeInfo']['PVP_SOLO']['battleInfo']['battleInfo']['battle'] }}</div>
+                    <div class="information-col-item"
+                         style="color: {{ data['battleTypeInfo']['PVP_SOLO']['battleInfo']['avgInfo']['winsData']['color'] }};">{{ '%.2f' | format(data['battleTypeInfo']['PVP_SOLO']['battleInfo']['avgInfo']['win']) }}%
+                    </div>
+                    {% if data['userInfo']['prStatus'] != 1 %}
+                    <div class="information-col-item"
+                         style="color: {{ data['battleTypeInfo']['PVP_SOLO']['prInfo']['color'] }};">{{ data['battleTypeInfo']['PVP_SOLO']['prInfo']['value'] }}</div>
+                    {% endif %}
+                    <div class="information-col-item"
+                         style="color: {{ data['battleTypeInfo']['PVP_SOLO']['battleInfo']['avgInfo']['damageData']['color'] }};">{{ '{:,}'.format(data['battleTypeInfo']['PVP_SOLO']['battleInfo']['avgInfo']['damage'] | int) }}</div>
+                    <div class="information-col-item">{{ '%.2f' | format(data['battleTypeInfo']['PVP_SOLO']['battleInfo']['avgInfo']['frags']) }}</div>
+<div class="information-col-item">{{ '%.1f' | format(data['battleTypeInfo']['PVP_SOLO']['battleInfo']['battleInfo']['survived'] / data['battleTypeInfo']['PVP_SOLO']['battleInfo']['battleInfo']['battle'] * 100 if data['battleTypeInfo']['PVP_SOLO']['battleInfo']['battleInfo']['battle'] else 0) }}%</div>
+                    <div class="information-col-item">{{ '%.2f' | format(data['battleTypeInfo']['PVP_SOLO']['battleInfo']['hitRatioInfo']['ratioMain']) }}%</div>
+                </div>
+            {% endif %}
+
+            {% if data['battleTypeInfo']['PVP_DIV2']['battle'] %}
+                <div class="information-col">
+                    <div class="information-col-item">自行车</div>
+                    <div class="information-col-item">{{ data['battleTypeInfo']['PVP_DIV2']['battleInfo']['battleInfo']['battle'] }}</div>
+                    <div class="information-col-item"
+                         style="color: {{ data['battleTypeInfo']['PVP_DIV2']['battleInfo']['avgInfo']['winsData']['color'] }};">{{ '%.2f' | format(data['battleTypeInfo']['PVP_DIV2']['battleInfo']['avgInfo']['win']) }}%
+                    </div>
+                    {% if data['userInfo']['prStatus'] != 1 %}
+                    <div class="information-col-item"
+                         style="color: {{ data['battleTypeInfo']['PVP_DIV2']['prInfo']['color'] }};">{{ data['battleTypeInfo']['PVP_DIV2']['prInfo']['value'] }}</div>
+                    {% endif %}
+                    <div class="information-col-item"
+                         style="color: {{ data['battleTypeInfo']['PVP_DIV2']['battleInfo']['avgInfo']['damageData']['color'] }};">{{ '{:,}'.format(data['battleTypeInfo']['PVP_DIV2']['battleInfo']['avgInfo']['damage'] | int) }}</div>
+                    <div class="information-col-item">{{ '%.2f' | format(data['battleTypeInfo']['PVP_DIV2']['battleInfo']['avgInfo']['frags']) }}</div>
+<div class="information-col-item">{{ '%.1f' | format(data['battleTypeInfo']['PVP_DIV2']['battleInfo']['battleInfo']['survived'] / data['battleTypeInfo']['PVP_DIV2']['battleInfo']['battleInfo']['battle'] * 100 if data['battleTypeInfo']['PVP_DIV2']['battleInfo']['battleInfo']['battle'] else 0) }}%</div>
+                    <div class="information-col-item">{{ '%.2f' | format(data['battleTypeInfo']['PVP_DIV2']['battleInfo']['hitRatioInfo']['ratioMain']) }}%</div>
+                </div>
+            {% endif %}
+
+            {% if data['battleTypeInfo']['PVP_DIV3']['battle'] %}
+                <div class="information-col">
+                    <div class="information-col-item">三轮车</div>
+                    <div class="information-col-item">{{ data['battleTypeInfo']['PVP_DIV3']['battleInfo']['battleInfo']['battle'] }}</div>
+                    <div class="information-col-item"
+                         style="color: {{ data['battleTypeInfo']['PVP_DIV3']['battleInfo']['avgInfo']['winsData']['color'] }};">{{ '%.2f' | format(data['battleTypeInfo']['PVP_DIV3']['battleInfo']['avgInfo']['win']) }}%
+                    </div>
+                    {% if data['userInfo']['prStatus'] != 1 %}
+                    <div class="information-col-item"
+                         style="color: {{ data['battleTypeInfo']['PVP_DIV3']['prInfo']['color'] }};">{{ data['battleTypeInfo']['PVP_DIV3']['prInfo']['value'] }}</div>
+                    {% endif %}
+                    <div class="information-col-item"
+                         style="color: {{ data['battleTypeInfo']['PVP_DIV3']['battleInfo']['avgInfo']['damageData']['color'] }};">{{ '{:,}'.format(data['battleTypeInfo']['PVP_DIV3']['battleInfo']['avgInfo']['damage'] | int) }}</div>
+                    <div class="information-col-item">{{ '%.2f' | format(data['battleTypeInfo']['PVP_DIV3']['battleInfo']['avgInfo']['frags']) }}</div>
+<div class="information-col-item">{{ '%.1f' | format(data['battleTypeInfo']['PVP_DIV3']['battleInfo']['battleInfo']['survived'] / data['battleTypeInfo']['PVP_DIV3']['battleInfo']['battleInfo']['battle'] * 100 if data['battleTypeInfo']['PVP_DIV3']['battleInfo']['battleInfo']['battle'] else 0) }}%</div>
+                    <div class="information-col-item">{{ '%.2f' | format(data['battleTypeInfo']['PVP_DIV3']['battleInfo']['hitRatioInfo']['ratioMain']) }}%</div>
+                </div>
+            {% endif %}
+
+            {% if data['battleTypeInfo']['RANK_SOLO']['battle'] %}
+                <div class="information-col">
+                    <div class="information-col-item">排位</div>
+                    <div class="information-col-item">{{ data['battleTypeInfo']['RANK_SOLO']['battleInfo']['battleInfo']['battle'] }}</div>
+                    <div class="information-col-item"
+                         style="color: {{ data['battleTypeInfo']['RANK_SOLO']['battleInfo']['avgInfo']['winsData']['color'] }};">{{ '%.2f' | format(data['battleTypeInfo']['RANK_SOLO']['battleInfo']['avgInfo']['win']) }}%
+                    </div>
+                    {% if data['userInfo']['prStatus'] != 1 %}
+                    <div class="information-col-item"
+                         style="color: {{ data['battleTypeInfo']['RANK_SOLO']['prInfo']['color'] }};">{{ data['battleTypeInfo']['RANK_SOLO']['prInfo']['value'] }}</div>
+                    {% endif %}
+                    <div class="information-col-item"
+                         style="color: {{ data['battleTypeInfo']['RANK_SOLO']['battleInfo']['avgInfo']['damageData']['color'] }};">{{ '{:,}'.format(data['battleTypeInfo']['RANK_SOLO']['battleInfo']['avgInfo']['damage'] | int) }}</div>
+                    <div class="information-col-item">{{ '%.2f' | format(data['battleTypeInfo']['RANK_SOLO']['battleInfo']['avgInfo']['frags']) }}</div>
+<div class="information-col-item">{{ '%.1f' | format(data['battleTypeInfo']['RANK_SOLO']['battleInfo']['battleInfo']['survived'] / data['battleTypeInfo']['RANK_SOLO']['battleInfo']['battleInfo']['battle'] * 100 if data['battleTypeInfo']['RANK_SOLO']['battleInfo']['battleInfo']['battle'] else 0) }}%</div>
+                    <div class="information-col-item">{{ '%.2f' | format(data['battleTypeInfo']['RANK_SOLO']['battleInfo']['hitRatioInfo']['ratioMain']) }}%</div>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="random-header one-background-color">随机单船</div>
+        <div class="information-body one-background-color data-battle-type">
+            <div class="ship-data-col two-background-color">
+                <div class="ship-col-item flex-4">类型</div>
+                <div class="ship-col-item flex-8">战舰</div>
+                <div class="ship-col-item flex-3">场次</div>
+                {% if data['userInfo']['prStatus'] != 1 %}<div class="ship-col-item flex-3">PR</div>{% endif %}
+                <div class="ship-col-item flex-3">胜率</div>
+                <div class="ship-col-item flex-4">场均</div>
+                <div class="ship-col-item flex-3">击杀</div>
+<div class="ship-col-item flex-3">存活</div>
+                <div class="ship-col-item flex-3">命中</div>
+            </div>
+            {% for ship in data['shipnfosTotal'] %}
+                {% if ship['battleInfo']['battleInfo']['battle']>0 %}
+                    <div class="ship-data-col">
+                        {% if ship['type'] == 'PVP_SOLO' %}
+                            <div class="ship-col-item flex-4">单野</div>
+                        {% elif ship['type'] == 'PVP_DIV2' %}
+                            <div class="ship-col-item flex-4">自行车</div>
+                        {% elif ship['type'] == 'PVP_DIV3' %}
+                            <div class="ship-col-item flex-4">三轮车</div>
+                        {% elif ship['type'] == 'PVP' %}
+                            <div class="ship-col-item flex-4">随机</div>
+                        {% elif ship['type'] == 'RANK_SOLO' %}
+                            <div class="ship-col-item flex-4">排位</div>
+                        {% endif %}
+                        <div class="ship-col-item ship-cell flex-8">
+                            <div class="sb-flagbox">
+                                <span class="sb-flag" style="background: url('{{ ship['shipInfo']['countryImage'] }}') center/contain no-repeat;"></span>
+                            </div>
+                            <span class="sb-type" style="background-image: url('{{ ship['shipInfo']['shipTypeImage'] }}');"></span>
+                            <span class="sb-level">{{ ship['shipInfo']['levelStr'] }}</span>
+                            <div class="ship-box sb-ship-img" style="background: url('{{ ship['shipInfo']['imgSmall'] }}') no-repeat;background-size: contain;background-position: 50% 30%;"></div>
+                            <div class="ship-box ship-name" style="font-size: 25px;letter-spacing: 3px;">{{ ship['shipInfo']['nameCn'] }}</div>
+                        </div>
+                        <div class="ship-col-item flex-3">{{ ship['battleInfo']['battleInfo']['battle'] }}</div>
+                        {% if data['userInfo']['prStatus'] != 1 %}
+                        <div class="ship-col-item flex-3"
+                             style="color: {{ ship['prInfo']['color'] }};">{{ ship['prInfo']['value'] }}</div>
+                        {% endif %}
+                        <div class="ship-col-item flex-3"
+                             style="color: {{ ship['battleInfo']['avgInfo']['winsData']['color'] }};">{{ '%.2f' | format(ship['battleInfo']['avgInfo']['win']) }}%
+                        </div>
+                        <div class="ship-col-item flex-4"
+                             style="color: {{ ship['battleInfo']['avgInfo']['damageData']['color'] }};">{{ '{:,}'.format(ship['battleInfo']['avgInfo']['damage'] | int) }}</div>
+                        <div class="ship-col-item flex-3">{{ '%.2f' | format(ship['battleInfo']['avgInfo']['frags']) }}</div>
+<div class="ship-col-item flex-3">{{ '%.1f' | format(ship['battleInfo']['battleInfo']['survived'] / ship['battleInfo']['battleInfo']['battle'] * 100 if ship['battleInfo']['battleInfo']['battle'] else 0) }}%</div>
+                        <div class="ship-col-item flex-3">{{ '%.2f' | format(ship['battleInfo']['hitRatioInfo']['ratioMain']) }}%</div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+
+        <div class="random-header one-background-color">详细对局</div>
+        <div class="information-body one-background-color data-battle-type">
+            <div class="ship-data-col two-background-color">
+                <div class="ship-col-item flex-4">时间</div>
+                <div class="ship-col-item flex-4">类型</div>
+                <div class="ship-col-item flex-8">战舰</div>
+                <div class="ship-col-item flex-3">场次</div>
+                {% if data['userInfo']['prStatus'] != 1 %}<div class="ship-col-item flex-3">PR</div>{% endif %}
+                <div class="ship-col-item flex-3">胜率</div>
+                <div class="ship-col-item flex-4">场均</div>
+                <div class="ship-col-item flex-3">击杀</div>
+<div class="ship-col-item flex-3">存活</div>
+                <div class="ship-col-item flex-3">命中</div>
+            </div>
+            {% for ship in data['shipInfos'] %}
+                {% if ship['battleInfo']['battleInfo']['battle']>0 %}
+                    <div class="information-col">{{ time.strftime('%Y-%m-%d',time.localtime(int(abs(ship['recordTime']/1000)))) }}</div>
+                    <div class="ship-data-col">
+                        {% if ship['code'] == 0 %}
+                            <div class="ship-col-item flex-4" style=" color: #8BC34A;">
+                                {{ time.strftime('%H:%M',time.localtime(int(abs(ship['recordTime']/1000)))) }}</div>
+                        {% elif ship['code'] == 1 %}
+
+
+                            <div class="ship-col-item flex-4" style=" color: #DD3B2FFF;">
+                                {{ time.strftime('%H:%M',time.localtime(int(abs(ship['recordTime']/1000)))) }}</div>
+                        {% else %}
+                            <div class="ship-col-item flex-4" style=" color: #87CEEB;">
+                                {{ time.strftime('%H:%M',time.localtime(int(abs(ship['recordTime']/1000)))) }}</div>
+                        {% endif %}
+                        {% if ship['type'] == 'PVP_SOLO' %}
+                            <div class="ship-col-item flex-4">单野</div>
+                        {% elif ship['type'] == 'PVP_DIV2' %}
+                            <div class="ship-col-item flex-4">自行车</div>
+                        {% elif ship['type'] == 'PVP_DIV3' %}
+                            <div class="ship-col-item flex-4">三轮车</div>
+                        {% elif ship['type'] == 'RANK_SOLO' %}
+                            <div class="ship-col-item flex-4">排位</div>
+                        {% endif %}
+                        <div class="ship-col-item ship-cell flex-8">
+                            <div class="sb-flagbox">
+                                <span class="sb-flag" style="background: url('{{ ship['shipInfo']['countryImage'] }}') center/contain no-repeat;"></span>
+                            </div>
+                            <span class="sb-type" style="background-image: url('{{ ship['shipInfo']['shipTypeImage'] }}');"></span>
+                            <span class="sb-level">{{ ship['shipInfo']['levelStr'] }}</span>
+                            <div class="ship-box sb-ship-img" style="background: url('{{ ship['shipInfo']['imgSmall'] }}') no-repeat;background-size: contain;background-position: 50% 30%;"></div>
+                            <div class="ship-box ship-name" style="font-size: 25px;letter-spacing: 3px;">{{ ship['shipInfo']['nameCn'] }}</div>
+                        </div>
+                        <div class="ship-col-item flex-3">{{ ship['battleInfo']['battleInfo']['battle'] }}</div>
+                        {% if data['userInfo']['prStatus'] != 1 %}
+                        <div class="ship-col-item flex-3"
+                             style="color: {{ ship['prInfo']['color'] }};">{{ ship['prInfo']['value'] }}</div>
+                        {% endif %}
+                        <div class="ship-col-item flex-3"
+                             style="color: {{ ship['battleInfo']['avgInfo']['winsData']['color'] }};">{{ '%.2f' | format(ship['battleInfo']['avgInfo']['win']) }}%
+                        </div>
+                        <div class="ship-col-item flex-4"
+                             style="color: {{ ship['battleInfo']['avgInfo']['damageData']['color'] }};">{{ '{:,}'.format(ship['battleInfo']['avgInfo']['damage'] | int) }}</div>
+                        <div class="ship-col-item flex-3">{{ '%.2f' | format(ship['battleInfo']['avgInfo']['frags']) }}</div>
+<div class="ship-col-item flex-3">{{ '%.1f' | format(ship['battleInfo']['battleInfo']['survived'] / ship['battleInfo']['battleInfo']['battle'] * 100 if ship['battleInfo']['battleInfo']['battle'] else 0) }}%</div>
+                        <div class="ship-col-item flex-3">{{ '%.2f' | format(ship['battleInfo']['hitRatioInfo']['ratioMain']) }}%</div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+
+        {{ footer_box() }}
+
+    </div>
+</div>
+</body>
+<script src="{{ template_path.as_uri() }}/main-v6.js" type="text/javascript"></script>
+</html>

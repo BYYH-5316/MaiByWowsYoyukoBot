@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<title>Hikari 指令帮助</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f0f2f5; padding: 20px; }
+  .card { width: 860px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 14px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06); padding: 24px 28px 20px; }
+  h1 { text-align: center; font-size: 30px; color: #2563eb; letter-spacing: 2px; }
+  .version { text-align: center; color: #6b7280; font-size: 13px; margin-top: 6px; }
+  .tip { margin-top: 14px; background: #eef4ff; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #374151; line-height: 1.8; }
+  .tip code { color: #d97706; }
+  h2 { margin: 18px 0 6px; font-size: 17px; color: #f59e0b; border-left: 3px solid #f59e0b; padding-left: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td { padding: 7px 10px; border-bottom: 1px solid #eef0f3; vertical-align: top; line-height: 1.5; }
+  td.cmd { width: 50%; color: #1d4ed8; font-family: Consolas, Menlo, monospace; word-break: break-all; }
+  td.desc { color: #4b5563; }
+  .foot { margin-top: 16px; text-align: center; color: #9ca3af; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🎴 Hikari 指令帮助</h1>
+  {% if data['version_info'] %}<div class="version">{{ data['version_info'] }}</div>{% endif %}
+
+  <div class="tip">
+    约定：<code>&lt;必填&gt;</code>　<code>[可选]</code><br/>
+    身份指定：<code>me</code>＝自己、或 <code>&lt;服务器&gt; &lt;昵称&gt;</code><br/>
+    服务器：<code>asia</code> 亚服 / <code>eu</code> 欧服 / <code>na</code> 美服 / <code>ru</code> 俄服 / <code>cn</code> 国服
+  </div>
+
+  <h2>📊 水表查询</h2>
+  <table>
+    <tr><td class="cmd">wws &lt;服务器&gt; &lt;昵称&gt;</td><td class="desc">查询账号总表（水表）</td></tr>
+    <tr><td class="cmd">wws ship &lt;船名&gt;　/　wws 单船 &lt;船名&gt;</td><td class="desc">查询单船水表</td></tr>
+    <tr><td class="cmd">wws recent [天数或日期]　/　wws 近期</td><td class="desc">查询账号近期战绩</td></tr>
+    <tr><td class="cmd">wws 近期随机 [天数或日期]　/　wws recent_random</td><td class="desc">查询近期随机战（也可 wws 近期 随机）</td></tr>
+    <tr><td class="cmd">wws 近期排位 [天数或日期]　/　wws recent_rank</td><td class="desc">查询近期排位战（也可 wws 近期 排位）</td></tr>
+    <tr><td class="cmd">wws ship &lt;船名&gt; recent [天数或日期]</td><td class="desc">查询单船近期战绩（也可 wws recent ship &lt;船名&gt;）</td></tr>
+    <tr><td class="cmd">wws recents　/　wws 单场近期</td><td class="desc">查询单场近期战绩</td></tr>
+    <tr><td class="cmd">wws ships &lt;等级/地区/类型&gt; [min N] [max N]</td><td class="desc">筛选查询账号战舰列表（如 ships bb 10 japan min 6 max 10）</td></tr>
+  </table>
+
+  <h2>🏆 排行榜</h2>
+  <table>
+    <tr><td class="cmd">wws ship.rank &lt;服务器&gt; &lt;船名&gt;</td><td class="desc">单船排行榜（也可 wws rank ship …）</td></tr>
+    <tr><td class="cmd">wws cw.rank [服务器] [赛季]</td><td class="desc">军团战排行榜（留空为全服最新赛季）</td></tr>
+    <tr><td class="cmd">wws clan.rank &lt;服务器&gt; &lt;公会TAG&gt;</td><td class="desc">军团排行榜（也可 wws rank clan …）</td></tr>
+  </table>
+
+  <h2>🛡️ 军团 / 公会</h2>
+  <table>
+    <tr><td class="cmd">wws clan &lt;服务器&gt; &lt;公会TAG&gt;　/　wws 军团 …</td><td class="desc">查询公会基础信息</td></tr>
+    <tr><td class="cmd">wws cw.recent &lt;服务器&gt; &lt;公会TAG&gt; [赛季] [队数]</td><td class="desc">查询公会军团战近期战绩（me/@ 也可）</td></tr>
+  </table>
+
+  <h2>🔗 账号绑定</h2>
+  <table>
+    <tr><td class="cmd">wws bind &lt;服务器&gt; &lt;昵称&gt;　/　wws 绑定 …</td><td class="desc">绑定游戏账号</td></tr>
+    <tr><td class="cmd">wws special_bind &lt;AID&gt;　/　wws 特殊绑定 &lt;AID&gt;</td><td class="desc">按 AID 绑定（网页版复制指令）</td></tr>
+    <tr><td class="cmd">wws bind_list me　/　wws 查询绑定 me</td><td class="desc">查看绑定列表</td></tr>
+    <tr><td class="cmd">wws change_bind [序号]　/　wws 切换绑定 [序号]</td><td class="desc">切换绑定（无序号弹出选择列表）</td></tr>
+    <tr><td class="cmd">wws delete_bind &lt;序号&gt;　/　wws 删除绑定 &lt;序号&gt;</td><td class="desc">删除绑定</td></tr>
+    <tr><td class="cmd">wws update　/　wws me update　/　wws &lt;服务器&gt; &lt;昵称&gt; update</td><td class="desc">更新用户缓存（刷新战绩数据）</td></tr>
+  </table>
+
+  <h2>🎮 娱乐</h2>
+  <table>
+    <tr><td class="cmd">wws roll [国家] [舰种] [等级]　/　wws 随机 …</td><td class="desc">随机抽船（可过滤条件）</td></tr>
+    <tr><td class="cmd">wws sx　/　wws 扫雪</td><td class="desc">查询扫雪收益</td></tr>
+    <tr><td class="cmd">wws ban [服务器] [昵称]　/　wws 封号记录 …</td><td class="desc">查询封禁记录（仅国服）</td></tr>
+    <tr><td class="cmd">wws box　/　wws sd　/　wws 圣诞船池</td><td class="desc">查询圣诞箱船池（me/@ 或 服务器+昵称）</td></tr>
+    <tr><td class="cmd">wws search_ship &lt;国家&gt; &lt;舰种&gt; &lt;等级&gt;　/　wws 搜船名 …</td><td class="desc">按条件查询船名</td></tr>
+  </table>
+
+  <h2>⚙️ 系统</h2>
+  <table>
+    <tr><td class="cmd">wws help　/　wws 帮助</td><td class="desc">查看本帮助</td></tr>
+    <tr><td class="cmd">wws check_version　/　wws 检查更新</td><td class="desc">检查 Hikari 版本更新</td></tr>
+    <tr><td class="cmd">wws update_style　/　wws 更新样式</td><td class="desc">更新模板样式</td></tr>
+    <tr><td class="cmd">wws update_ship　/　wws 更新战舰</td><td class="desc">更新战舰图片资源</td></tr>
+  </table>
+
+  <div class="foot">— Hikari-core · 发送 wws help 查看本帮助 —</div>
+</div>
+</body>
+</html>

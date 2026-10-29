@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+
+<head>
+    <meta charset="utf-8">
+    <title></title>
+    <link href="{{ template_path.as_uri() }}/main-v6.css" rel="stylesheet" type="text/css">
+    <link href="{{ template_path.as_uri() }}/avatar-v6.css" rel="stylesheet" type="text/css">
+</head>
+{% from 'partials/user-v6-macros.html' import info_header_style, info_header with context %}
+{% from 'partials/common-v6-macros.html' import footer_box with context %}
+{{ info_header_style(poster=false) }}
+<style>
+    body {
+        background: linear-gradient(180deg, #f6f4ff 0%, #eef1f8 100%);
+    }
+
+    .main-content, body {
+        width: 1500px;
+        margin: 0 auto;
+        font-size: 30px;
+        font-family: "Microsoft YaHei Bold", "Microsoft YaHei", sans-serif;
+        font-weight: bold;
+    }
+
+    .page-box {
+        width: 1500px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* ===== 顶部头像区域（与 wws-info-v5 家族一致） ===== */
+    
+
+    
+
+
+    .auth-status {
+        color: #767171;
+        margin: var(--gap-block) 50px 0;
+        height: 60px;
+        background: rgba(245, 240, 255, 0.5);
+        border: 2px solid rgba(180, 160, 230, 0.6);
+        border-radius: 16px;
+        line-height: 60px;
+        font-weight: normal;
+        text-align: center;
+        box-shadow: 0 2px 12px rgba(200, 190, 255, 0.15);
+    }
+
+    .box-info {
+        color: #767171;
+        margin: 30px 50px;
+        height: 60px;
+        background: rgba(245, 240, 255, 0.5);
+        border: 2px solid rgba(180, 160, 230, 0.6);
+        border-radius: 16px;
+        line-height: 60px;
+        font-weight: normal;
+        text-align: center;
+        box-shadow: 0 2px 12px rgba(200, 190, 255, 0.15);
+    }
+</style>
+<style>
+    
+    /* ===== 统一卡片（玻璃紫调） ===== */
+    .total-ship-row {
+        margin: 0 40px;
+        margin-top: 30px;
+        display: flex;
+        height: 300px;
+    }
+
+    .total-ship {
+        margin: 0 10px;
+        background: rgba(245, 240, 255, 0.5);
+        border: 2px solid rgba(180, 160, 230, 0.6);
+        border-radius: 16px;
+        box-shadow: 0 2px 12px rgba(200, 190, 255, 0.15);
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .schedule {
+        margin: 0 10px;
+        background: rgba(245, 240, 255, 0.5);
+        border: 2px solid rgba(180, 160, 230, 0.6);
+        border-radius: 16px;
+        box-shadow: 0 2px 12px rgba(200, 190, 255, 0.15);
+        flex: 1;
+    }
+
+    .total-ship .up {
+        font-size: 80px;
+        font-weight: normal;
+        color: #767171;
+        flex: 1;
+        line-height: 150px;
+        text-align: center;
+    }
+
+    .total-ship .under {
+        flex: 1;
+        display: flex;
+        text-align: center;
+    }
+
+    .inbox-col {
+        flex: 2;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .in-port-col {
+        flex: 2;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .mini-title {
+        font-weight: normal;
+        font-size: 40px;
+        color: #767171;
+    }
+
+    .in-port {
+        font-size: 60px;
+        color: #92D050;
+    }
+
+    .inbox {
+        font-size: 60px;
+        color: #E60000;
+    }
+
+    .sch-box {
+        margin: 30px;
+    }
+
+    .sch-box .text {
+        font-weight: normal;
+        color: #767171;
+        font-size: 40px;
+    }
+
+    .pr {
+        display: flex;
+        height: 60px;
+        font-weight: bold;
+        line-height: 60px;
+        background: transparent;
+        margin: 0;
+        border-radius: 0;
+        overflow: visible;
+    }
+
+    .pr-bar-bg {
+        position: relative;
+        flex: 1;
+        line-height: 60px;
+        background-color: rgba(180, 160, 230, 0.35);
+        height: 60px;
+        border-radius: 30px;
+        margin-top: 10px;
+        text-align: center;
+        color: #FFFFFF;
+    }
+
+    .pr-bar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 60px;
+        z-index: 1;
+        border-radius: 30px;
+    }
+
+    .pr-number {
+        z-index: 99;
+        position: absolute;
+        left: 0;
+        right: 0;
+        font-size: 35px;
+        font-weight: bold;
+        color: #303133;
+        text-shadow: none;
+    }
+
+    .tips {
+        margin-top: 70px;
+        text-align: center;
+        font-weight: bold;
+        font-size: 20px;
+        color: #909399;
+        line-height: 30px;
+    }
+
+    .footer {
+        margin-top: 30px;
+        text-align: center;
+        font-weight: bold;
+        font-size: 24px;
+        color: #909399;
+        margin-bottom: 20px;
+    }
+</style>
+<style>
+    .rare-info {
+        margin: 0 50px;
+        background: rgba(245, 240, 255, 0.5);
+        border: 2px solid rgba(180, 160, 230, 0.6);
+        border-radius: 16px;
+        box-shadow: 0 2px 12px rgba(200, 190, 255, 0.15);
+        min-height: 300px;
+        display: flex;
+        justify-content: flex-start;
+        gap: 5px;
+        flex-direction: row;
+        align-content: flex-start;
+        flex-wrap: wrap;
+        padding: 10px 20px;
+    }
+
+    .ship-item {
+        min-width: 333px;
+        max-width: 333px;
+        height: 60px;
+        line-height: 60px;
+        font-weight: normal;
+
+        width: calc(25% - 10px); /* 每行显示3个，减去间距 */
+        box-sizing: border-box; /* 包括边框和内边距 */
+        overflow: hidden; /* 隐藏溢出内容 */
+        white-space: nowrap; /* 禁止换行 */
+        text-overflow: ellipsis; /* 显示省略号 */
+    }
+</style>
+<body>
+<div class="main-content">
+    <div class="page-box">
+        {{ info_header(register=true, server_style=true) }}
+
+        <div class="auth-status">
+            {% if data['auth'] %}
+                <span>授权状态：</span><span style="color: #47A123; font-weight: bold;">已授权</span>
+            {% else %}
+                <span>授权状态：</span><span style="color: #E60000; font-weight: bold;">未授权</span>
+            {% endif %}
+        </div>
+
+        <div class="total-ship-row">
+            <div class="total-ship">
+                <div class="up">
+                    总船只
+                </div>
+                <div class="under">
+                    <div style="flex: 1;"></div>
+                    <div class="inbox-col">
+                        <span class="mini-title">圣诞箱中</span>
+                        <span class="inbox">{{ data['count'] }}</span>
+                    </div>
+                    <div class="in-port-col">
+                        <span class="mini-title" style="color: #DF9B2D;">已拥有</span>
+                        <span class="in-port">{{ data['have'] }}</span>
+                    </div>
+                    <div style="flex: 1;"></div>
+                </div>
+            </div>
+            <div class="schedule">
+                <div class="sch-box">
+                    <div class="text">收集进度</div>
+                    <div class="pr">
+                        <div class="pr-bar-bg">
+                            <span class="pr-number"><span class="pr-text"></span></span>
+                            <div class="pr-bar" style="background-color: #92D050;"></div>
+                            <div class="tips">
+                                <p>tips：未授权数据不准确，仅支持统计已战斗过的舰船</p>
+                                <p>授权地址(点击右上角WG图标)：<span style="color: red">wows.mgaia.top</span></p>
+                                <p>频道搜索"战舰世界-yuyuko"即可使用稳定的腾讯官方机器人~</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!--        船只信息-->
+        {% for dataMap in data['dataMap'] %}
+            <div class="box-info">
+                <span>概率：</span><span style="color: #E60000; font-weight: bold;">{{ '%.2f' | format(dataMap['probability']) }}%</span>
+                <span>&nbsp;总船只：</span><span style="color: black; font-weight: bold;">{{ dataMap['count'] }}</span>
+                <span>&nbsp;已拥有：</span><span style="color: #92D050; font-weight: bold;">{{ dataMap['rare'] }}</span>
+            </div>
+            <div class="rare-info">
+            {% for shipList in dataMap['data'] %}
+                {% if shipList['status'] == 0 %}
+                    <div class="ship-item" style="color: #DF9B2D;">
+                {% endif %}
+                {% if shipList['status'] == 1 %}
+                    <div class="ship-item" style="color: black;">
+                {% endif %}
+            <span class="level">{{ shipList['ship']['levelStr'] }}</span>&nbsp;
+            <span class="ship-name">{{ shipList['ship']['nameCn'] }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+        {{ footer_box() }}
+    </div>
+</div>
+<script>
+    let ship_count = document.querySelector(".in-port").innerText;
+    let bar_width = document.querySelector(".pr-bar-bg").clientWidth;
+    let inbox_count = document.querySelector(".inbox").innerText;
+    let sch = (ship_count / inbox_count) * 100;
+    sch = sch.toFixed(2);
+    // 防止收集进度过低导致进图条异常
+    if (ship_count < 11) {
+        document.querySelector('.pr-bar').style.width = (11 / inbox_count) * bar_width + "px";
+    } else {
+        document.querySelector('.pr-bar').style.width = (ship_count / inbox_count) * bar_width + "px";
+    }
+    document.querySelector(".pr-text").innerText = sch + "%";
+</script>
+</body>
+</html>

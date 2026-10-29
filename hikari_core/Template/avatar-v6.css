@@ -1,0 +1,271 @@
+/* ==========================================================
+   Hikari 模板体系 v6 — 头部 / PR 条样式（wws-info-v6 专用）
+   头部样式与 v5 保持一致（同 wws-info-v5 / avatar-v5.css）
+   ========================================================== */
+
+/* ---------- 头部（与 v5 同款） ---------- */
+
+.page-header {
+    border-radius: 36px;
+    height: 300px;
+    margin: 50px 50px 0;
+    display: flex;
+    justify-content: flex-start;
+    box-shadow: 0 5px 20px #252525;
+    background-position: center;
+    background-size: 100%;
+}
+
+.masking-header {
+    display: flex;
+    justify-content: flex-start;
+    height: 280px;
+    width: auto;
+    margin-top: 10px;
+    margin-left: 10px;
+    gap: 15px;
+    border-radius: 24px;
+    padding-left: 40px;
+    background: transparent;
+    /* 头部这块的"毛玻璃"只有模糊、没有底色（background 是全透明的），
+       所以它只吃 --card-blur 这一个旋钮；alpha 对它没有意义。
+       变量的来源与缺省见 main-v6.css 的「毛玻璃底色」注释。 */
+    backdrop-filter: blur(calc(3px * var(--card-blur, 1)));
+    -webkit-backdrop-filter: blur(calc(3px * var(--card-blur, 1)));
+    border: 1px solid rgba(220, 230, 255, 0.5);
+    box-shadow: none;
+    /* 允许收缩到比内容更窄（flex 项目默认 min-width: auto = 最小内容宽度，不让缩）。
+       名字那行是 nowrap 的，最小内容宽度 = 整个名字，不放开这一层，
+       下面的 .user-info 就永远拿不到一个够窄的容器，省略号不会触发、文字会顶出页面。 */
+    min-width: 0;
+}
+
+/* 头像底图（background-image）由头部宏内联输出，因为链接是数据里的：
+   用户侧 partials/user-v6-macros.html，公会侧 partials/clan-v6-macros.html。
+   两侧都只有一张图（旧契约的「军团战底座 + 徽章」两图叠放已随赛季段位头像废弃）。
+   这里只管盒子尺寸，不管图。 */
+.avatar-header {
+    filter: drop-shadow(9px 9px 12px rgba(0, 0, 0, 0.3));
+    margin-left: -25px;
+    margin-right: 10px;
+    margin-top: 15px;
+    border-radius: 20px;
+    width: 250px;
+    height: 250px;
+    /* 头像盒**不许被压扁**：它是 .masking-header（flex 行）里的项目，默认 flex-shrink: 1，
+       一旦这一行的内容（军团名 / 用户名过长）撑不下，flex 会连它一起缩 ——
+       实测长名字时头像盒被压成 203×250（不是 250×250）。
+       后果就是「上面变形」：图是按盒宽 100% 画的（background-size: 100%），
+       盒宽一缩图跟着变小、连同 250×250 的方框比例一起走样，整块头像看着就是扁的。
+       钉死成不缩：让右边那列去缩（它有 min-width: 0 + 省略号，缩得起）。 */
+    flex: none;
+    opacity: 0.95;
+    box-shadow: 0 0 10px #484848;
+    background-position: center;
+    background-size: 100%;
+}
+
+/* 头像隐藏时（宏里的 hide_avatar：用户侧 = 头像位与 dogTag 都没图，公侧 = status == 0）：
+   右侧信息列直接左移接管这块位置。
+   只能 display:none —— 用 visibility:hidden 会继续占着 250px 空位，
+   用 width:0 还会留下 margin。 */
+.masking-header.no-avatar .avatar-header {
+    display: none;
+}
+
+/* 没有头像时左内边距跟着收掉：.masking-header 的 40px padding-left 是给头像留的，
+   空着就是白边。用户 / 公会两侧共用这一个类。 */
+.masking-header.no-avatar {
+    padding-left: 5px;
+}
+
+/* ---------- 没有头像的公会：用 tag 生成的 BA 风格 logo 顶掉头像位 ----------
+   avatar.avatar.status == 0 时以前是整块隐藏（.no-avatar），现在宏会塞一个
+   BA 文字 logo 进来（见 clan-v6-macros 的 show_avatar_logo / avatar_logo_size），
+   盒子要留着，只是内容从 background-image 换成了一段 HTML。
+   背景保持全透明（alpha = 0）：盒子里除了 logo 什么都不画，只剩 .avatar-header
+   自带的圆角 + 阴影，形状和真头像那块牌子一致。
+   想回到浅玻璃底就把 alpha 调成 0.45（早先为了不让空盒子看着像空框加过）。 */
+.avatar-header.has-avatar-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0);
+}
+
+/* ▍上下 / 左右微调：只改下面 .ba-logo 里这两个数，别的地方都不用动
+     --ba-logo-lift  整体往上抬多少，无单位倍数 × 字号：
+                       0    = flex 居中（**默认**）—— 实测这时文字正好落在方框正中
+                       0.1  = 再往上抬 0.1 个字号（5 字 tag 字号 ~64px 时约 6px）
+                       -0.1 = 往下压
+     --ba-logo-push  整体左右挪多少，同样是无单位倍数 × 字号。
+                       默认 -0.16 —— 这个数正好抵消倾斜造成的「视觉右移」：
+                       skewX(-21.8°) 的原点钉在基线上，而字面在基线上方，
+                       所以**画出来**的文字相对布局盒整体偏右约 0.16 个字号
+                       （量了 12 个 tag：0.08~0.24em）。这样文字才真正水平居中。
+                       想手动挪就在这个数上加减：正数往右、负数往左。
+   为什么不是 px / em：字号随 tag 长短自动变，倍数才跟着一起缩；
+   而 em 在 .ba-logo 上等于 0（组件容器 font-size: 0），写 em 根本不生效。
+   --ba-logo-w 是模板钉死的布局宽度（两个词的 advance 之和）：
+   短 tag 时浏览器会把词方框撑得比文字宽（负 margin 的徽记搅的），
+   不钉死居中基准就不确定，「文字居中」也就无从谈起。 */
+.avatar-header.has-avatar-logo .ba-logo {
+    --ba-logo-lift: 0;
+    --ba-logo-push: -0.28;
+    width: calc(var(--ba-size) * var(--ba-logo-w));
+    transform: translate(calc(var(--ba-size) * var(--ba-logo-push)),
+                         calc(var(--ba-size) * var(--ba-logo-lift) * -1));
+}
+
+/* （2026-09-30 移除）这里原有「头像中间的文字（公会战头像）」一整块 ——
+   .avatar-header 上的 --avatar-text-top-1/2 变量、.has-avatar-text 与 .avatar-text 系列。
+   它服务的是旧契约里 avatar.status == 2 的赛季段位徽章（叠底座 + 盖 avatarText 排名字），
+   服务端已删除 avatarText、公会头像也不再回落到段位图，整套随之删除。
+   要恢复得同时动：clan-v6-macros 的 show_avatar_text / avatar_base + 服务端 DTO。 */
+
+.clan-user-server {
+    margin: 5px;
+    text-align: left;
+    font-size: 20px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    flex-direction: column;
+    font-weight: bold;
+    flex-grow: 1;
+    /* 同上：这一列也要能缩，否则名字行（nowrap）会把整列顶宽，再往外顶出玻璃底板 */
+    min-width: 0;
+    /* 行距分配统一交给 space-between：首行贴头像顶、末行贴头像底，
+       中间各行平分剩余空间（上下间距平均）。
+       为什么不用 auto 外边距：auto 会先把剩余空间吃光再交给 justify-content，
+       分配就不再是平均的（注册时间会被顶到某一个位置）。
+       有头像 / 无头像都是这一套：头像高度固定（250px），
+       隐藏头像时信息列照旧占着同样的上下范围，所以两种情况的排版一致。
+       不要改回 center：居中时无签名（内容更矮）会整体下沉，与有签名的观感不一致。 */
+    justify-content: space-between;
+    /* 末行贴到列底时还比头像底缘低 8px，内缩掉，末行就与头像底缘齐平：
+       masking-header 内容高 278，avatar 底缘在 265（margin-top 15 + 250），
+       本列 border-box 底在 273（margin 5）→ 273 - 265 = 8 */
+    padding-bottom: 8px;
+}
+
+.user-info {
+    font-weight: bolder;
+    line-height: 30px;
+    font-size: 45px;
+    /* 左右不留内边距：留了的话「[公会标签] 用户名」会比下面的
+       注册时间 / 服务器右移 16px，左边缘对不齐。
+       上下 18px 保留，用户名文字与头像顶部的对齐靠它。 */
+    padding: 18px 0;
+    border-radius: 10px;
+    display: inline-block;
+    /* 名字太长**不换行**，一行到底，超出部分用 … 省略（公会名 / 用户名共用这条，两边都是同一套
+       .user-info + .mirage-text）。换行会把整个头部撑高、把下面几行（Clan Id / 服务器 / 注册时间）
+       挤走，省略号更稳。
+       四个属性要一起写，少一个都不生效：
+         white-space: nowrap  才不换行；
+         overflow: hidden     才裁得掉；
+         text-overflow: …     才会画省略号；
+         max-width: 100%      兜住宽度 —— 本元素是 flex 列（.clan-user-server）里的项目，
+                              项目宽度默认按内容算（fit-content），不会自己收缩，
+                              不兜住的话它照样超出容器，省略号根本没机会触发。
+       注意 .mirage-text 的个性颜色是 background-clip: text，照样作用于省略号，不用另做处理。 */
+    max-width: 100%;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-sign-time,
+.user-server,
+.user-account {
+    color: #000000;
+    font-size: 25px;
+    font-weight: 600;
+    font-family: "Microsoft YaHei UI Light", serif;
+}
+
+.user-signature {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding: 30px;
+    gap: 10px;
+    width: auto;
+    /* 签名条的"压暗"底，同样吃 --card-alpha（见 main-v6.css 的「毛玻璃底色」注释）。
+       它没有 backdrop-filter —— 只有底色、不糊背景。 */
+    background: rgba(0, 0, 0, calc(0.1 * var(--card-alpha, 1)));
+    border-radius: 36px;
+    /* 与上方文字行的间距交给 .clan-user-server 的 space-between 统一分配：
+       这里再留 10px 会让有签名那列比头像底缘多探出 9px，末行对不齐头像底 */
+    margin-top: 0;
+    font-size: 25px;
+}
+
+/* 深色 banner：白字（模板通过 .dark-banner 类启用，浅色 banner 保持黑字） */
+.page-header.dark-banner .user-sign-time,
+.page-header.dark-banner .user-server,
+.page-header.dark-banner .user-account,
+.page-header.dark-banner .user-signature {
+    color: #ffffff;
+}
+
+.page-header.dark-banner .user-info.no-color-name .mirage-text {
+    color: #ffffff;
+}
+
+/* ---------- PR 条 ---------- */
+
+.pr {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 35px;
+    border-radius: 26px;
+    margin: var(--gap-block) 50px 0;
+    height: 96px;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+}
+
+.svg-waves {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 70%;
+}
+
+.svg-waves svg {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.wave-path {
+    fill: rgba(255, 255, 255, 0.2);
+}
+
+.pr-number {
+    font-size: 44px;
+    font-weight: 600;
+    text-shadow: 0 0 4px currentColor, 0 0 8px rgba(255, 255, 255, 0.25),
+    0 0 15px rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    position: relative;
+    z-index: 2;
+    color: white;
+}
+
+.pr-text {
+    font-size: 36px;
+    font-weight: 600;
+}

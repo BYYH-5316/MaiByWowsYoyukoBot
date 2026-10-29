@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Hikari Commands</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f0f2f5; padding: 20px; }
+  .card { width: 860px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 14px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06); padding: 24px 28px 20px; }
+  h1 { text-align: center; font-size: 30px; color: #2563eb; letter-spacing: 1px; }
+  .version { text-align: center; color: #6b7280; font-size: 13px; margin-top: 6px; }
+  .tip { margin-top: 14px; background: #eef4ff; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #374151; line-height: 1.8; }
+  .tip code { color: #d97706; }
+  h2 { margin: 18px 0 6px; font-size: 17px; color: #f59e0b; border-left: 3px solid #f59e0b; padding-left: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td { padding: 7px 10px; border-bottom: 1px solid #eef0f3; vertical-align: top; line-height: 1.5; }
+  td.cmd { width: 50%; color: #1d4ed8; font-family: Consolas, Menlo, monospace; word-break: break-all; }
+  td.desc { color: #4b5563; }
+  .foot { margin-top: 16px; text-align: center; color: #9ca3af; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🎴 Hikari Commands</h1>
+  {% if data['version_info'] %}<div class="version">{{ data['version_info'] }}</div>{% endif %}
+
+  <div class="tip">
+    Syntax: <code>&lt;required&gt;</code>　<code>[optional]</code><br/>
+    Identity: <code>me</code> (yourself), or <code>&lt;server&gt; &lt;nickname&gt;</code><br/>
+    Servers: <code>asia</code> / <code>eu</code> / <code>na</code> / <code>ru</code> / <code>cn</code>
+  </div>
+
+  <h2>📊 Stats</h2>
+  <table>
+    <tr><td class="cmd">wws &lt;server&gt; &lt;nickname&gt;</td><td class="desc">Account overview (stats)</td></tr>
+    <tr><td class="cmd">wws ship &lt;ship name&gt;</td><td class="desc">Single-ship stats</td></tr>
+    <tr><td class="cmd">wws recent [days or date]</td><td class="desc">Recent battles for your account</td></tr>
+    <tr><td class="cmd">wws recent_random [days or date]</td><td class="desc">Recent random battles only (also: wws recent random)</td></tr>
+    <tr><td class="cmd">wws recent_rank [days or date]</td><td class="desc">Recent ranked battles only (also: wws recent rank)</td></tr>
+    <tr><td class="cmd">wws ship &lt;ship name&gt; recent [days or date]</td><td class="desc">Recent battles for a ship</td></tr>
+    <tr><td class="cmd">wws recents</td><td class="desc">Recent battles (single battle view)</td></tr>
+    <tr><td class="cmd">wws ships &lt;tier/nation/type&gt; [min N] [max N]</td><td class="desc">Filter your ship list (e.g. ships bb 10 japan min 6 max 10)</td></tr>
+  </table>
+
+  <h2>🏆 Rankings</h2>
+  <table>
+    <tr><td class="cmd">wws ship.rank &lt;server&gt; &lt;ship name&gt;</td><td class="desc">Ship ranking</td></tr>
+    <tr><td class="cmd">wws cw.rank [server] [season]</td><td class="desc">Clan war ranking (empty = latest season, all servers)</td></tr>
+    <tr><td class="cmd">wws clan.rank &lt;server&gt; &lt;clan tag&gt;</td><td class="desc">Clan ranking</td></tr>
+  </table>
+
+  <h2>🛡️ Clan</h2>
+  <table>
+    <tr><td class="cmd">wws clan &lt;server&gt; &lt;clan tag&gt;</td><td class="desc">Clan overview</td></tr>
+    <tr><td class="cmd">wws cw.recent &lt;server&gt; &lt;clan tag&gt; [season] [team]</td><td class="desc">Clan war recent battles (me/@ also works)</td></tr>
+  </table>
+
+  <h2>🔗 Bind</h2>
+  <table>
+    <tr><td class="cmd">wws bind &lt;server&gt; &lt;nickname&gt;</td><td class="desc">Bind your game account</td></tr>
+    <tr><td class="cmd">wws special_bind &lt;AID&gt;</td><td class="desc">Bind by account ID (copy from website)</td></tr>
+    <tr><td class="cmd">wws bind_list me</td><td class="desc">List bound accounts</td></tr>
+    <tr><td class="cmd">wws change_bind [index]</td><td class="desc">Switch bound account (empty shows a picker)</td></tr>
+    <tr><td class="cmd">wws delete_bind &lt;index&gt;</td><td class="desc">Remove a bound account</td></tr>
+    <tr><td class="cmd">wws update / wws me update / wws &lt;server&gt; &lt;nickname&gt; update</td><td class="desc">Refresh user data cache</td></tr>
+  </table>
+
+  <h2>🎮 Fun</h2>
+  <table>
+    <tr><td class="cmd">wws roll [nation] [type] [tier]</td><td class="desc">Roll a random ship (optional filters)</td></tr>
+    <tr><td class="cmd">wws sx</td><td class="desc">Snowball / Christmas event rewards</td></tr>
+    <tr><td class="cmd">wws ban [server] [nickname]</td><td class="desc">Ban records (CN server only)</td></tr>
+    <tr><td class="cmd">wws box</td><td class="desc">Christmas box ship pool (me/@ or server+nickname)</td></tr>
+    <tr><td class="cmd">wws search_ship &lt;nation&gt; &lt;type&gt; &lt;tier&gt;</td><td class="desc">Search ship names by filters</td></tr>
+  </table>
+
+  <h2>⚙️ System</h2>
+  <table>
+    <tr><td class="cmd">wws help</td><td class="desc">Show this help page</td></tr>
+    <tr><td class="cmd">wws check_version</td><td class="desc">Check Hikari updates</td></tr>
+    <tr><td class="cmd">wws update_style</td><td class="desc">Update template styles</td></tr>
+    <tr><td class="cmd">wws update_ship</td><td class="desc">Update ship image resources</td></tr>
+  </table>
+
+  <div class="foot">— Hikari-core · send "wws help" for this page —</div>
+</div>
+</body>
+</html>

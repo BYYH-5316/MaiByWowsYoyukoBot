@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+    <meta charset="utf-8">
+    <title></title>
+    <link href="{{ template_path.as_uri() }}/main-v6.css" rel="stylesheet" type="text/css">
+    <link href="{{ template_path.as_uri() }}/avatar-v6.css" rel="stylesheet" type="text/css">
+</head>
+<style>
+    * {
+        padding: 0;
+        margin: 0;
+    }
+
+    body {
+        width: 1300px;
+        margin: 0 auto;
+        font-family: "Microsoft YaHei Bold", "Microsoft YaHei", sans-serif;
+        font-weight: bold;
+        background: linear-gradient(180deg, #f6f4ff 0%, #eef1f8 100%);
+        color: #2d2d3a;
+    }
+
+    .page-box {
+        width: 1300px;
+        display: flex;
+        flex-direction: column;
+        padding-bottom: 30px;
+    }
+
+    /* ===== 标题头（纯文字版，无背景色，居中，小号） ===== */
+    .title-header {
+        margin: 20px 5px 5px 5px;
+        height: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        gap: 12px;
+        line-height: 1;
+        color: #2d2d3a;
+        background: none;
+        box-shadow: none;
+    }
+
+    /* 战舰等级 = 纯文字 */
+    .ship-tier {
+        font-size: 22px;
+        font-weight: bold;
+        color: #6a11cb;
+        flex-shrink: 0;
+    }
+
+    /* 战舰图 */
+    .ship-thumb {
+        width: 76px;
+        height: 50px;
+        flex-shrink: 0;
+        background-size: contain;
+        background-position: center;
+        background-repeat: no-repeat;
+        filter: drop-shadow(1px 1px 4px rgba(0, 0, 0, 0.15));
+    }
+
+    /* 战舰名称 */
+    .ship-name {
+        display: inline-block;
+        color: #2d2d3a;
+        font-size: 26px;
+        font-weight: bold;
+        max-width: 380px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* ===== Rank List ===== */
+    .rank-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin: 0 30px;
+    }
+
+    /* ===== 统一表头（排名 | 玩家 | 场次 | 场均 | 胜率 | PR） ===== */
+    .rank-header {
+        margin: 5px 30px 0;
+        height: 46px;
+        display: flex;
+        align-items: center;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #38bdf8 0%, #2563eb 100%);
+        color: #ffffff;
+        font-size: 18px;
+        font-weight: bold;
+        box-shadow: 0 3px 10px rgba(37, 99, 235, 0.28);
+        overflow: hidden;
+    }
+
+    .rank-header .rh-player {
+        flex: 0 0 530px;
+        display: flex;
+        align-items: center;
+        height: 100%;
+        box-sizing: border-box;
+        padding: 0 5px 0 12px;
+    }
+
+    .rank-header .rh-rank {
+        width: 60px;
+        flex-shrink: 0;
+        text-align: center;
+    }
+
+    .rank-header .rh-name {
+        flex: 1;
+        padding-left: 16px;
+        text-align: left;
+    }
+
+    .rank-header .rh-stats {
+        flex: 1;
+        display: flex;
+        padding: 0 15px;
+    }
+
+    .rank-header .rh-stat {
+        flex: 1;
+        text-align: center;
+    }
+
+    /* ===== 前 10 名 ===== */
+    .rank-row {
+        display: flex;
+        align-items: stretch;
+        height: 84px;
+        border-radius: 16px;
+        overflow: hidden;
+        background: #ffffff;
+        border: 1px solid rgba(180, 160, 230, 0.35);
+        box-shadow: 0 3px 12px rgba(120, 110, 180, 0.10);
+    }
+
+    /* 前三名：领奖台渐变 */
+    .rank-row.rank-1 {
+        border-color: rgba(212, 175, 55, 0.65);
+        background: linear-gradient(90deg, #fdf4de 0%, #ffffff 55%);
+        box-shadow: 0 4px 20px rgba(212, 175, 55, 0.22);
+    }
+
+    .rank-row.rank-2 {
+        border-color: rgba(180, 180, 190, 0.65);
+        background: linear-gradient(90deg, #f2f2f5 0%, #ffffff 55%);
+        box-shadow: 0 4px 18px rgba(150, 150, 160, 0.16);
+    }
+
+    .rank-row.rank-3 {
+        border-color: rgba(200, 140, 80, 0.65);
+        background: linear-gradient(90deg, #fbeedd 0%, #ffffff 55%);
+        box-shadow: 0 4px 18px rgba(180, 110, 50, 0.16);
+    }
+
+    .player-section {
+        flex: 0 0 530px;
+        display: flex;
+        align-items: center;
+        padding: 5px;
+        gap: 10px;
+        border-left: 6px solid #b39ddb; /* 4-10 名的左侧排名色条 */
+    }
+
+    .rank-row.rank-1 .player-section,
+    .rank-row.rank-2 .player-section,
+    .rank-row.rank-3 .player-section {
+        border-left: none; /* 前三名用渐变，不再用色条 */
+    }
+
+    .player-glass {
+        display: flex;
+        align-items: center;
+        flex: 1;
+        height: 100%;
+        border-radius: 12px;
+        padding: 0 10px;
+        gap: 12px;
+        background-position: center;
+        background-size: cover;
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        border: 1px solid rgba(180, 160, 230, 0.35);
+        background: rgba(245, 240, 255, 0.55);
+        position: relative;
+        isolation: isolate;
+    }
+
+    /* 遮罩层：有背景图时覆盖一层暗色半透明底，确保文字清晰 */
+    .player-glass.has-banner::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 12px;
+        background: rgba(0, 0, 0, 0.35);
+        z-index: -1;
+    }
+
+    .rank-badge {
+        flex-shrink: 0;
+        width: 54px;
+        height: 54px;
+        line-height: 54px;
+        text-align: center;
+        border-radius: 14px;
+        font-size: 22px;
+        font-weight: bold;
+        background: rgba(106, 17, 203, 0.08);
+        color: #6a11cb;
+        margin-left: 6px;
+    }
+
+    .rank-row.rank-1 .rank-badge {
+        background: linear-gradient(135deg, #ffd700, #ffb300);
+        color: #7a5200;
+        font-size: 15px;
+        border: 2px solid #ffe27a;
+        box-shadow: 0 0 16px rgba(212, 175, 55, 0.45);
+    }
+
+    .rank-row.rank-2 .rank-badge {
+        background: linear-gradient(135deg, #ececec, #b0b0b8);
+        color: #55555f;
+        font-size: 15px;
+        border: 2px solid #e2e2e8;
+        box-shadow: 0 0 12px rgba(150, 150, 160, 0.30);
+    }
+
+    .rank-row.rank-3 .rank-badge {
+        background: linear-gradient(135deg, #e6ab6c, #bf7a3c);
+        color: #ffffff;
+        font-size: 15px;
+        border: 2px solid #f0c294;
+        box-shadow: 0 0 12px rgba(180, 110, 50, 0.30);
+    }
+
+    .player-avatar {
+        width: 62px;
+        height: 62px;
+        border-radius: 14px;
+        background-position: center;
+        background-size: cover;
+        flex-shrink: 0;
+        background-color: #e8e4f5;
+        filter: drop-shadow(4px 4px 6px rgba(0, 0, 0, 0.15));
+        box-shadow: 0 0 6px rgba(120, 110, 180, 0.3);
+    }
+
+    .player-name {
+        font-weight: bolder;
+        font-size: 20px;
+        color: #2d2d3a;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        flex-grow: 1;
+    }
+
+    .player-glass.has-banner .player-name {
+        color: #fff;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+    }
+
+    .player-glass .player-avatar,
+    .player-glass .player-name {
+        z-index: 1;
+        position: relative;
+    }
+
+    .stats-section {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        padding: 0 15px;
+    }
+
+    .stat-col {
+        flex: 1;
+        text-align: center;
+    }
+
+    .stat-value {
+        font-size: 24px;
+        color: #2d2d3a;
+    }
+
+    /* ===== 11-30 名（次区：弱化但清晰，与 top10 列对齐） ===== */
+    .compact-title {
+        margin: 30px 30px 12px;
+        text-align: center;
+        font-size: 18px;
+        font-weight: normal;
+        color: #9a9aa8;
+        letter-spacing: 3px;
+    }
+
+    .rank-list-compact {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 0 30px;
+    }
+
+    .rank-row-compact {
+        display: flex;
+        align-items: stretch;
+        height: 50px;
+        border-radius: 10px;
+        background: #fbfaff;
+        border: 1px solid rgba(180, 160, 230, 0.18);
+        overflow: hidden;
+    }
+
+    .rank-row-compact .compact-player {
+        flex: 0 0 530px;
+        display: flex;
+        align-items: center;
+        padding: 0 8px 0 4px;
+        gap: 10px;
+        border-left: 5px solid #ece5f8;
+    }
+
+    .rank-row-compact .compact-badge {
+        flex-shrink: 0;
+        width: 30px;
+        text-align: center;
+        font-size: 16px;
+        color: #9a9aa8;
+        font-weight: bold;
+    }
+
+    .rank-row-compact .compact-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background-position: center;
+        background-size: cover;
+        flex-shrink: 0;
+        background-color: #ece7f8;
+        border: 1px solid rgba(180, 160, 230, 0.3);
+        filter: grayscale(35%);
+        opacity: 0.92;
+    }
+
+    .rank-row-compact .compact-name {
+        flex: 1;
+        font-size: 16px;
+        color: #6f6f80;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    /* 军团 tag 保持弱化灰色（保留"次区"感觉），玩家名不变色 */
+    .rank-row-compact .compact-name span {
+        color: #9a9aaa !important;
+    }
+
+    .rank-row-compact .compact-stats {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        padding: 0 15px;
+    }
+
+    /* 场次默认灰；场均/胜率/PR 保留接口自带颜色（inline 覆盖类） */
+    .rank-row-compact .compact-stat {
+        flex: 1;
+        text-align: center;
+        font-size: 16px;
+        color: #6a6a7a;
+    }
+
+    /* ===== Footer ===== */
+    .footer {
+        margin-top: 35px;
+        text-align: center;
+        font-size: 20px;
+        color: #909399;
+    }
+
+    .footer p {
+        margin-bottom: 4px;
+    }
+</style>
+<body>
+<div class="page-box">
+    <div class="title-header">
+        <span class="ship-tier">{{ data['shipInfo']['levelStr'] }}</span>
+
+        {% if dget(data['shipInfo'], 'imgSmall') %}
+        <span class="ship-thumb" style="background-image: url('{{ data['shipInfo']['imgSmall'] }}');"></span>
+        {% endif %}
+        <span class="ship-name">{{ data['shipInfo']['nameCn'] }}</span>
+    </div>
+
+    {% set rank_list = data['data']['value'] %}
+
+    {% if rank_list | length %}
+    <!-- 表头 -->
+    <div class="rank-header">
+        <div class="rh-player">
+            <span class="rh-rank">排名</span>
+            <span class="rh-name">玩家</span>
+        </div>
+        <div class="rh-stats">
+            <span class="rh-stat">场次</span>
+            <span class="rh-stat">场均</span>
+            <span class="rh-stat">胜率</span>
+            <span class="rh-stat">PR</span>
+        </div>
+    </div>
+
+    <!-- Top 10 -->
+    <div class="rank-list">
+        {% for rank in rank_list.slice(0, 10) %}
+        {% set rank_num = loop.index %}
+        <div class="rank-row {% if rank_num == 1 %}rank-1{% elif rank_num == 2 %}rank-2{% elif rank_num == 3 %}rank-3{% endif %}">
+            <div class="player-section">
+                <div class="rank-badge">
+                    {% if rank_num == 1 %}1st
+                    {% elif rank_num == 2 %}2nd
+                    {% elif rank_num == 3 %}3rd
+                    {% else %}{{ rank_num }}
+                    {% endif %}
+                </div>
+                <div class="player-glass {% if rank['userInfo']['avatar']['banner']['status'] > 0 %}has-banner{% endif %}"
+                     {% if rank['userInfo']['avatar']['banner']['status'] > 0 %}
+                     style="background-image: url('{{ rank['userInfo']['avatar']['banner']['data'] }}');"
+                     {% endif %}
+                >
+                    {# status > 0 → 用 avatar.data，否则回落 dogTag；与 partials/user-v6-macros 的
+                       info_header 同源（原来是 == 2，status == 1 的玩家两页对不上）。改一边记得改另一边。 #}
+                    <div class="player-avatar"
+                         {% if rank['userInfo']['avatar']['avatar']['status'] > 0 %}
+                         style="background-image: url('{{ rank['userInfo']['avatar']['avatar']['data'] }}');"
+                         {% else %}
+                         style="background-image: url('{{ rank['userInfo']['dogTag'] }}');"
+                         {% endif %}
+                    ></div>
+                    <div class="player-name">
+                        {% if rank['userInfo']['clanInfo']['tag'] %}
+                        <span style="color: {{ rank['userInfo']['clanInfo']['color'] }}; font-size: 16px;">[{{ rank['userInfo']['clanInfo']['tag'] }}]</span>
+                        {% endif %}
+                        {{ rank['userInfo']['userName'] }}
+                    </div>
+                </div>
+            </div>
+            <div class="stats-section">
+                <div class="stat-col">
+                    <div class="stat-value">{{ rank['battle'] }}</div>
+                </div>
+                <div class="stat-col">
+                    <div class="stat-value" style="color: {{ rank['damageColor']['color'] }};">{{ rank['damage'] }}</div>
+                </div>
+                <div class="stat-col">
+                    <div class="stat-value" style="color: {{ rank['winsColor']['color'] }};">{{ '%.1f' | format(rank['wins']) }}%</div>
+                </div>
+                <div class="stat-col">
+                    <div class="stat-value" style="color: {{ rank['pr']['color'] }};">{{ rank['pr']['value'] }}</div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Rank 11-30 -->
+    {% if rank_list|length > 10 %}
+    <div class="compact-title">11 - 30 名</div>
+    <div class="rank-list-compact">
+        {% for rank in rank_list.slice(10, 30) %}
+        <div class="rank-row-compact">
+            <div class="compact-player">
+                <div class="compact-badge">{{ rank['sortIndex'] }}</div>
+                {# 判据同上（status > 0），与 11-30 名这栏、以及用户页保持一致 #}
+                <div class="compact-avatar"
+                     {% if rank['userInfo']['avatar']['avatar']['status'] > 0 %}
+                     style="background-image: url('{{ rank['userInfo']['avatar']['avatar']['data'] }}');"
+                     {% else %}
+                     style="background-image: url('{{ rank['userInfo']['dogTag'] }}');"
+                     {% endif %}
+                ></div>
+                <div class="compact-name">
+                    {% if rank['userInfo']['clanInfo']['tag'] %}
+                    <span style="color: {{ rank['userInfo']['clanInfo']['color'] }};">[{{ rank['userInfo']['clanInfo']['tag'] }}]</span>
+                    {% endif %}
+                    {{ rank['userInfo']['userName'] }}
+                </div>
+            </div>
+            <div class="compact-stats">
+                <div class="compact-stat">{{ rank['battle'] }}</div>
+                <div class="compact-stat" style="color: {{ rank['damageColor']['color'] }};">{{ rank['damage'] }}</div>
+                <div class="compact-stat" style="color: {{ rank['winsColor']['color'] }};">{{ '%.1f' | format(rank['wins']) }}%</div>
+                <div class="compact-stat" style="color: {{ rank['pr']['color'] }};">{{ rank['pr']['value'] }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <div class="footer">
+        <p>频道搜索"战舰世界-yuyuko"即可使用稳定的腾讯官方机器人~</p>
+        <p>©github:wows-yuyuko</p>
+    </div>
+</div>
+</body>
+</html>

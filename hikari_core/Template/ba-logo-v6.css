@@ -1,0 +1,187 @@
+/* ==========================================================
+   蔚蓝档案（Blue Archive）风格文字 Logo — 独立组件
+   ----------------------------------------------------------
+   纯 CSS + 内联 SVG，零依赖、零 JS。整块可以直接粘进 Jinja 模板。
+
+   v6 模板里的用法：公会页头部「没有头像」（avatar.avatar.status == 0）时，
+   用军团 tag 生成这个 logo 顶掉头像位 —— 见 partials/clan-v6-macros.html 的
+   show_avatar_logo / avatar_logo_size / avatar_logo_shift（居中补偿在 avatar-v6.css 的
+   .avatar-header.has-avatar-logo 里，那个方框的定位上下文也在那边）。
+   本文件是 Temp/ba-logo/ba-logo.css 的副本，调试台在 Temp/ba-logo/index.html；
+   改样式请两边一起改，或只改这里再回灌调试台。
+
+   用法：
+     <span class="ba-logo" style="--ba-size:96px">
+       <span class="ba-logo__left">Blue</span><span class="ba-logo__mark" aria-hidden="true">…两个 svg…</span><span class="ba-logo__right">Archive</span>
+     </span>
+   徽记里那两段 <svg> 见 index.html 里的 MARK_SVG。
+
+   ⚠ 三个子元素**必须写在同一行、中间不留空格/换行**。
+     （真忘了也不致命：容器 font-size:0 已经吃掉空白，但保持紧凑更保险。）
+
+   ── 尺寸 ──
+   整体大小只有一个入口：--ba-size（等同参考实现的 font-size）。
+   48px 是小标、200px 是大标题，其余尺寸全部按 em 派生，等比跟着走。
+
+   ── 几何出处 ──
+   照抄参考实现 nulla2011/bluearchive-logo 的 settings.ts：
+     画布高 250 / 字号 84 / 文字基线在画布 68% 处 / 倾斜 tan = -0.4（≈ -21.8°）
+     徽记方框 250×250，左边缘在「两词交接点」左 72，右边缘越过交接点 178
+   换算成 em（1em = 84 单位）就是下面 .ba-logo__mark 里那几个数。
+
+   ── 三个踩过的坑（别改回去，文件尾有详细说明）──
+   1. 不要用 display:flex + align-items:baseline 来对基线：
+      flex 对「没有行盒的元素」用的是**边框盒底边**当基线，margin-bottom 不参与，
+      结果徽记整体会跑到基线上方（实测 markTop 2.976em，应该是 2.024em）。
+      必须用行内布局 + vertical-align: -0.952em，并且容器 font-size 归零吃掉空白。
+   2. 所有 em 相关参数写成**无单位倍数**（--ba-stroke / --ba-mark-x / --ba-skew-origin …），
+      在用到的地方再 × 1em。因为容器 font-size 是 0，
+      直接写成 "0.143em" 的自定义属性在容器上声明、在子元素上使用时取值会不对。
+   3. transform-origin 必须钉在基线上（--ba-skew-origin），
+      否则倾斜会让「基线上的视觉交接点」和布局交接点错开 0.157em，徽记会整体偏右。
+   ========================================================== */
+
+.ba-logo {
+    /* ===== 可调参数 ===== */
+    --ba-size: 84px;          /* 整体大小：唯一的尺寸入口 */
+    --ba-skew: -21.8deg;      /* 倾斜角，参考实现是 -21.8° */
+    --ba-skew-origin: 0.893;  /* 倾斜原点落在文字基线上，单位 em（见文件尾注释） */
+    --ba-weight: 800;         /* 字重 */
+    --ba-tracking: 0;         /* 字距，单位 em（无单位倍数） */
+    --ba-accent: #128AFA;     /* 前半词 / 十字 的蔚蓝 */
+    --ba-ink: #2B2B2B;        /* 后半词的墨色 */
+    --ba-halo: #2B2B2B;       /* 光晕弧颜色 */
+    --ba-outline: #ffffff;    /* 后半词描边颜色 */
+    --ba-stroke: 0.143;       /* 描边粗细，单位 em（参考实现 12/84） */
+    --ba-mark-scale: 1;       /* 徽记缩放，以文字基线为基准 */
+    --ba-mark-x: 0;           /* 徽记水平微调，单位 em，正数往右 */
+    --ba-mark-y: 0;           /* 徽记垂直微调，单位 em，正数往下 */
+    --ba-glow: 0px;           /* 外发光半径，0 = 关闭 */
+    --ba-glow-color: #7fd4ff; /* 外发光颜色 */
+
+    display: inline-block;
+    position: relative;
+    isolation: isolate;       /* 自成层叠上下文，不和页面里的定位元素打架 */
+    font-size: 0;             /* 吃掉子元素之间的空白字符 */
+    line-height: 0;
+    white-space: nowrap;
+    font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB",
+                 "Noto Sans SC", "Source Han Sans SC", "Segoe UI", system-ui, sans-serif;
+    font-weight: var(--ba-weight);
+    vertical-align: baseline;
+    user-select: none;
+}
+
+/* ---------- 前半词：蔚蓝 ---------- */
+.ba-logo__left {
+    display: inline-block;
+    position: relative;
+    z-index: 1;                          /* 光晕要压在它上面 */
+    font-size: var(--ba-size);
+    line-height: 1;
+    letter-spacing: calc(var(--ba-tracking) * 1em);
+    color: var(--ba-accent);
+    white-space: nowrap;
+    transform: skewX(var(--ba-skew));
+    transform-origin: 50% calc(var(--ba-skew-origin) * 1em);
+    vertical-align: baseline;
+}
+
+/* ---------- 后半词：墨色 + 白描边 ---------- */
+.ba-logo__right {
+    display: inline-block;
+    position: relative;
+    z-index: 2;                          /* 压在光晕上面 */
+    font-size: var(--ba-size);
+    line-height: 1;
+    letter-spacing: calc(var(--ba-tracking) * 1em);
+    color: var(--ba-ink);
+    white-space: nowrap;
+    transform: skewX(var(--ba-skew));
+    transform-origin: 50% calc(var(--ba-skew-origin) * 1em);
+    vertical-align: baseline;
+    /* paint-order 让描边画在字面之下，否则描边会啃掉字形一圈 */
+    -webkit-text-stroke: calc(var(--ba-stroke) * 1em) var(--ba-outline);
+    paint-order: stroke fill;
+}
+
+/* ---------- 徽记：光晕 + 十字 ---------- */
+/* 它是一个没有行盒的 inline-block，夹在两词交接点上：
+   width/height = 参考画布 250/84 = 2.976em，
+   margin-left  = -72/84  = -0.857em（左边缘探到前半词里）
+   margin-right = -178/84 = -2.119em（右边缘深深压进后半词）
+   vertical-align = -80/84 = -0.952em（底边落到文字基线下方）
+   负 margin 不会改变它自身的宽度，只是把左右两词「拉回」交接点。 */
+.ba-logo__mark {
+    display: inline-block;
+    position: relative;                  /* 只定位、不设 z-index ->
+                                            不建层叠上下文，里面的 svg
+                                            才能和左右两词按 z-index 交错 */
+    font-size: var(--ba-size);
+    line-height: 1;
+    width: calc(2.976em * var(--ba-mark-scale));
+    height: calc(2.976em * var(--ba-mark-scale));
+    margin-left: calc((var(--ba-mark-x) - 0.857 * var(--ba-mark-scale)) * 1em);
+    margin-right: calc((var(--ba-mark-x) - 2.119 * var(--ba-mark-scale)) * 1em);
+    vertical-align: calc((var(--ba-mark-y) - 0.952 * var(--ba-mark-scale)) * 1em);
+    pointer-events: none;
+}
+
+.ba-logo__mark > svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    overflow: visible;
+}
+
+.ba-logo__halo  { z-index: 1; color: var(--ba-halo); }    /* 压在前半词上 */
+.ba-logo__cross { z-index: 3; color: var(--ba-accent); }  /* 压在最上层 */
+
+/* 外发光：--ba-glow 保持 0 时 drop-shadow 半径是 0，等于没开 */
+.ba-logo__left,
+.ba-logo__right {
+    filter: drop-shadow(0 0 var(--ba-glow) var(--ba-glow-color));
+}
+
+/* ==========================================================
+   变体
+   ========================================================== */
+
+/* 不要徽记（纯文字） */
+.ba-logo--no-mark > .ba-logo__mark { display: none; }
+
+/* 只要光晕 / 只要十字 */
+.ba-logo--no-halo  > .ba-logo__mark > .ba-logo__halo  { display: none; }
+.ba-logo--no-cross > .ba-logo__mark > .ba-logo__cross { display: none; }
+
+/* 单色：两词同色（做简洁标题或配深色底时用） */
+.ba-logo--mono > .ba-logo__left { color: var(--ba-ink); }
+
+/* 词间加一点气口（默认两词紧贴，是官方 logo 的贴法） */
+.ba-logo--gap > .ba-logo__left { margin-right: 0.14em; }
+
+/* 深色背景主题：亮字 + 深描边 */
+.ba-logo--dark {
+    --ba-accent: #4FC3F7;
+    --ba-ink: #ffffff;
+    --ba-halo: #8FD6FF;
+    --ba-outline: #0B2E5C;
+    --ba-stroke: 0.1;
+}
+
+/* ==========================================================
+   关于 --ba-skew-origin（第三个坑）
+   ----------------------------------------------------------
+   两个词各自 skewX 之后，**基线上的**视觉交接点会和布局交接点错开：
+   CSS 的 transform-origin 默认在盒子正中（50% 50%），
+   而文字基线在盒子里的位置是「字体上升高度」处（微软雅黑实测 0.893em），
+   两者差 0.893 - 0.5 = 0.393em，乘 tan(21.8°)=0.4 就是 0.157em 的横向偏移。
+   偏移不修的话，徽记（它不跟着倾斜）会整体往右跑 0.157em，看起来就是
+   「十字压到 Archive 的第二个字母上」，而不是官方那种正压在交界处。
+
+   把 transform-origin 的 y 钉到基线高度（0.893em）就抵消掉了，
+   于是 .ba-logo__mark 的 -0.857em / -2.119em 可以直接照抄参考实现。
+   换字体（上升高度不同）时改这一个数即可；顺带用 --ba-mark-x 微调也行。
+   ========================================================== */

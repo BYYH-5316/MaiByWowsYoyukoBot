@@ -1,0 +1,124 @@
+ <!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+    <meta charset="utf-8">
+    <title></title>
+    <link href="{{ template_path.as_uri() }}/main-v6.css" rel="stylesheet" type="text/css">
+    <link href="{{ template_path.as_uri() }}/avatar-v6.css" rel="stylesheet" type="text/css">
+</head>
+<style>
+    body {
+        width: 360px;
+        background: linear-gradient(180deg, #f6f4ff 0%, #eef1f8 100%);
+    }
+
+    .main-content {
+        width: 360px;
+        margin: 20px auto;
+        font-family: "Microsoft YaHei Bold", "Microsoft YaHei", sans-serif;
+        font-size: 20px;
+        border-radius: 16px;
+        font-weight: bold;
+        background: rgba(245, 240, 255, 0.5);
+        border: 2px solid rgba(180, 160, 230, 0.6);
+        box-shadow: 0 2px 12px rgba(200, 190, 255, 0.15);
+        overflow: hidden;
+        box-sizing: border-box;
+    }
+
+    .header {
+        height: 80px;
+        display: flex;
+        align-items: center;
+        line-height: 40px;
+        background: linear-gradient(135deg, rgba(106, 17, 203, 0.08) 0%, rgba(37, 117, 252, 0.08) 100%);
+        border-bottom: 2px solid rgba(180, 160, 230, 0.4);
+    }
+
+    .header-text {
+        color: #4a4a4a;
+    }
+
+    .ship-list {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .ship-item {
+        display: flex;
+        height: 60px;
+        line-height: 60px;
+    }
+
+    .ship-item:nth-child(odd) {
+        background: rgba(180, 160, 230, 0.15);
+    }
+
+    .ship-inf {
+        flex: 1;
+        display: flex;
+    }
+
+    .index {
+        width: 60px;
+        text-align: center;
+        font-weight: bold;
+        color: #6a11cb;
+    }
+
+    .ship-level {
+        width: 100px;
+        text-align: center;
+        display: inline-block;
+    }
+
+    .ship-name {
+        width: 200px;
+        text-align: left;
+        display: inline-block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .icon {
+        width: 40px;
+    }
+
+    .icon img {
+        display: block;
+        width: 30px;
+        height: 30px;
+        margin: 15px 0;
+    }
+</style>
+<body>
+<div class="main-content">
+    <div class="header">
+        <div class="sec">20s</div>
+        <div class="header-text">
+            <div>存在多个符合条件的公会</div>
+            <div>请在20秒内选择对应的序号</div>
+        </div>
+    </div>
+    <div class="ship-list">
+        {% for clan in data %}
+        <div class="ship-item">
+            <div class="index"></div>
+            <div class="ship-inf">
+                <div class="ship-level">[{{ clan['tag'] }}]</div>
+                <div class="ship-name">{{ clan['name'] }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+</body>
+
+<script>
+    let index_doc = document.getElementsByClassName('index');
+    for(let idx=0;idx<index_doc.length;idx++) {
+        index_doc[idx].innerText = idx+1;
+    }
+</script>
+</html>

@@ -1,0 +1,266 @@
+{# ==========================================================
+   v6 用户侧头部（wws-info 系 / 单船 / 开箱 / 赏金 等页面共用）
+   - info_header_style(): 头部数据绑定样式（海报 / 彩色名 / banner / 头像背景）
+   - info_header():       头部标记（banner_dark 白字通过 .dark-banner 类控制）
+   调用方式: {% from 'partials/user-v6-macros.html' import info_header_style, info_header with context %}
+   PR 条 / 页脚 / 船名条见 partials/common-v6-macros.html。
+
+   数据来源：/public/wows/account/user/info2 的 data（组件吃 data['userInfo']，
+   取不到就退回 data 本身）。公会的头部在 partials/clan-v6-macros.html，两份各自维护，
+   这边只认用户接口的字段，不做任何 is_clan 分支：
+     用户名 userName     服务器 serverCn(亚服)      ID accountId
+     建号时间 accountCreateTime（秒）
+     军团标签 clanInfo.tag / 标签色 clanInfo.color（用户对象也带 clanInfo = 他自己的军团）
+     头像槽位 5 个：poster / colorName / banner / avatar / sign
+     头像兜底 dogTag（用户接口独有，见下面的「头像槽位语义」）
+   ▍槽位形状（2026-09-30 契约 v3）：{ status, data, attrs } —— status 仍是 int 0/1
+     （0 = 不显示，1 = 显示；旧契约里「2 及以上自定义」那个第三态已取消），data 是内容，
+     参数一律进 attrs（banner→dark、poster→opacity、glassmorphismCard→alpha/blur，
+     彩色名 / 头像 / 签名没有扩展属性 → attrs 为空对象）。取参数一律 attrs 里的具名键，
+     顶层不再有 dark 这类字段（服务端不做旧格式兼容，见服务端 docs/avatar-schema-redesign.md §11）。
+   ========================================================== #}
+
+{% macro info_header_style(poster=true) %}
+{%- set u = data['userInfo'] if data['userInfo'] is defined and data['userInfo'] else data -%}
+{%- set avatar_box = u['avatar'] if u['avatar'] is defined and u['avatar'] else {} -%}
+{%- set poster_img = avatar_box['poster'] if avatar_box['poster'] is defined else none -%}
+{%- set color_name = avatar_box['colorName'] if avatar_box['colorName'] is defined else none -%}
+{%- set banner = avatar_box['banner'] if avatar_box['banner'] is defined else none -%}
+{%- set avatar_img = avatar_box['avatar'] if avatar_box['avatar'] is defined else none -%}
+{%- set avatar_status = (avatar_img['status'] | int) if avatar_img and avatar_img['status'] is defined else 0 -%}
+{%- set dog_tag = u['dogTag'] if u['dogTag'] is defined and u['dogTag'] else '' -%}
+{# 头像槽位语义（用户 / 公会一致）：status == 0 不显示，> 0 显示。
+   v3 起值域只剩 0/1 —— 旧契约里"2 及以上自定义"那个第三态已取消，所以这里恒是
+   「显示 / 不显示」的二值判断。槽位缺席 / status 缺失按 0 处理。
+   用户侧多一条兜底：取不到要显示的图（status == 0，或 status > 0 但 data 是空的）时，
+   头像位回落到 dogTag（用户接口独有的图，形如 nahida-static/root/<accountId>.png）；
+   连 dogTag 都没有才是「真的没图」→ 整块隐藏（见 info_header 的 hide_avatar）。 #}
+{%- set avatar_src = (avatar_img['data'] if avatar_status > 0 else '') or dog_tag -%}
+{# 大背景图透明度：渲染侧键 `poster.attrs.opacity`。▍服务端口径（已对齐，别改）：
+       0   = 完全不透明 → 背景图**完全显示**（最实，缺省）
+       100 = 完全透明   → 背景图**完全看不见**
+   中间线性（50 = 半透明）。缺省 / 非数字一律按 0（完全显示）兜底。
+   夹到 0-100，脏数据不会写出非法 CSS。
+
+   ▍2026-09-30 契约 v3（attrs 化）：这个值从顶层 `poster.dark` 挪进
+   `poster.attrs.opacity` 并改了键名 —— **只是换位置 + 改名，方向没翻**：
+   服务端是把旧的 dark 值原样写进 opacity（`AvatarItemAttrs.OPACITY`，缺省仍是 0，
+   见 WowsToolsModule `docs/avatar-schema-redesign.md` §11）。所以下面那次 `100 -`
+   换算照旧要做，别被 "opacity" 这个名字骗到、直接当 CSS 不透明度用。
+   ▍变量名刻意把两个方向分开：poster_fade = **透明度**（越大越淡，接口值），
+   poster_opacity = **不透明度**（CSS 要的，= 100 - fade）。别混。 #}
+{%- set poster_attrs = poster_img['attrs'] if poster_img and poster_img['attrs'] is defined else {} -%}
+{%- set poster_fade = dget(poster_attrs, 'opacity', 0) | int -%}
+{%- set poster_fade = [[poster_fade, 0] | max, 100] | min -%}
+{%- set poster_opacity = 100 - poster_fade -%}
+{# 遮罩 alpha = (100 - 不透明度) / 200，固定两位小数。
+   统一放大成「百分位的整数」再拆：
+       poster_mask_pct = (100 - opacity) * 100 / 200   ← 一千分位，例如 42 → 2900
+       整数部分 = poster_mask_pct / 100  (2900 / 100 = 29)
+       小数部分 = poster_mask_pct % 100  (2900 % 100 = 00)
+   —— 直接算 (100 - opacity) * 50 得到的是一千分位没错，但再 % 100 拿小数位就串了，
+   必须先把「一千分位」落到同一个变量上，整数 / 小数都从它身上取。
+   三个坑：
+     1) **不能**用 round() 收尾 —— Jinja 的 round(3) 对 50.0 这种整数浮点会输出
+        "50.0"，写进 rgba(0, 0, 0, 50.0) 就是 alpha = 50（全不透明黑），背景图变黑块；
+     2) **不能**写成 `a ~ '.' ~ '%02d' | format(b)` —— 过滤器只作用于最右边那个
+        表达式，会把整串拼接结果一起 format 掉；
+     3) **不能**用 `//` 直接当整数用 —— Jinja 的 `//` 是浮点除（Python 2 语义），
+        2900 // 100 得到的是 29.0 而不是 29。
+   所以整数部分走 int()，小数部分单独 format，再拼起来。 #}
+{%- set poster_mask_pct = (100 - poster_opacity) * 100 // 200 | int -%}
+{%- set poster_mask_frac = '%02d' | format((poster_mask_pct % 100) | int) -%}
+{%- set poster_mask = (poster_mask_pct // 100) | int ~ '.' ~ poster_mask_frac -%}
+{# 大背景图的**纵向取景位置**（对齐方式）。
+   ▍**固定「顶部」= 0%，不读数据、不可调**（2026-09-19 起，产品决定）。
+     早先这里认 poster_img['align']（数字 0-100，或 'top'/'center'/'bottom'，缺省居中），
+     现在一律按顶部渲染 —— 老数据里存着的对齐值**直接忽略**（不是"缺省值变了"，
+     是彻底不读）。编辑器（web/avatar-editor）那边也已把「纵向对齐」这个旋钮撤掉。
+     要改回可调得同时动四处：本文件 + partials/clan-v6-macros.html +
+     web/avatar-editor/avatar-editor.js 的 _styleText + index.html 的面板。
+   ▍为什么固定顶部：这个值**只在页面比 2250px 矮时看得出来**（cover 按宽贴合、纵向被裁）。
+     分界点 = 图高 4096 × 容器宽 1500 / 图宽 2731 = 2250px：
+       页高 ≥ 2250 → 按高贴合，图片高度正好铺满，纵向位置怎么调都是同一个画面
+                    （也就是说**长页上「顶部」与「居中」渲染完全相同**）；
+       页高 < 2250 → 按宽贴合、纵向被裁，这时只有「顶部」能保证**各页取景一致**
+                    （短页看到的永远是图的最上面那一段）。
+     所以固定顶部既覆盖了长页，又让短页之间不再飘。
+   ▍为什么当初不做成 poster.crop.y：裁剪器那边表达不了 —— 预览的取景框 = 实时页高，
+     cover 之下纵向溢出≈0，getPosition() 一律报 50（见 avatar-editor.js 的注释）。
+   与公会侧 partials/clan-v6-macros.html 同源，改一边记得改另一边。 #}
+{%- set poster_pos_y = 0 -%}
+{# 毛玻璃「元素块」（卡片）的两个全局旋钮 —— 都下发到 .main-content 上的 CSS 变量，
+   由 main-v6.css / avatar-v6.css 里各条 background / backdrop-filter 去乘：
+       --card-alpha  卡片底色透明度倍数   1.00 = 当前观感（缺省）→ 0.00 = 完全透明
+       --card-blur   毛玻璃模糊强度倍数   1.00 = 当前观感（缺省）→ 0.00 = 完全不模糊
+
+   ▍数据位置（2026-09-30 契约 v3，用户 / 公会一致）：avatar_box['glassmorphismCard']，
+     是个**槽位形状**的对象，两个值是两个**具名键**放在 attrs 里（data 留空 null）：
+         { status: 1, data: null, attrs: { alpha: "AAA", blur: "BBB" } }
+         alpha = 卡片底色透明度 0-100，blur = 模糊强度 0-200
+     所以 {alpha:"000", blur:"100"} 就是「完全不透明 + 缺省模糊」= 没改过的状态。
+     改造前这两值是塞在 data 里的一个打包串（"AAA-BBB"），v3 起拆成具名键
+     （结构化参数不该塞进一个字符串里）；旧的 `card: {dark, blur}` 写法更早已废弃。
+   ▍**status 不参与渲染**：服务端只是复用槽位形状存这两个参数。唯一的门槛是**有海报** ——
+     没海报时主 JS 会把卡片整套换成实色（见 Template/main-v6.js 的浅色主题兜底），
+     旋钮在那时没有任何意义。
+   ▍CSS 侧一律写 var(--card-alpha, 1) —— 这里不输出时也是 1（= 现状）。
+     反过来说，**这里绝不能输出空串或畸形值**：var() 拿到非法值会让整条
+     background / backdrop-filter 声明在「计算值阶段」失效（背景直接变透明、
+     模糊直接没了），而且不报错。所以必须先夹取、再用「整数 + 两位小数」拼成
+     合法数字 —— 沿用上面 poster_mask 的写法（Jinja 的 // 是浮点除，要 | int 收口；
+     也不能用 round()，整数浮点会输出 "50.0"）。 #}
+{%- set gc_box = avatar_box['glassmorphismCard'] if avatar_box['glassmorphismCard'] is defined and avatar_box['glassmorphismCard'] else {} -%}
+{%- set gc_attrs = gc_box['attrs'] if gc_box['attrs'] is defined and gc_box['attrs'] else {} -%}
+{# ▍取值一律走 `| int(缺省)` 而不是裸 `| int`：两者对「字段在但值是 null」
+   （JSON 的 null / Python 的 null）和「值不是数字字符串」的处理天差地别 ——
+   裸 int 会把它们都变成 0，而 blur 的缺省是 100，0 就等于「把模糊全关掉」，
+   一个 null 就能让页面糊度跑偏。带缺省的写法会回落到各自的缺省值。
+   ▍dget 的缺省给空串：键缺席时落到 `'' | int(缺省)`，正好回到各自的缺省值。
+   ▍缺段 / 脏串一律回落缺省：'abc' → int 认不出来 → 0 / 100。
+   ▍服务端把这个键叫 alpha，但它的方向是「透明度」（000 = 不透明 = 卡片底色最实），
+   与 CSS 变量 --card-alpha（不透明度）相反 —— 所以下面要 100 - 这一次换算，
+   变量名也刻意分成 card_fade（接口值）/ card_alpha（CSS 值）。 #}
+{%- set card_fade_pct = [[(dget(gc_attrs, 'alpha', '') | int(0)), 0] | max, 100] | min -%}
+{%- set card_blur_pct = [[(dget(gc_attrs, 'blur', '') | int(100)), 0] | max, 200] | min -%}
+{%- set card_alpha_pct = 100 - card_fade_pct -%}
+{%- set card_alpha_frac = '%02d' | format((card_alpha_pct % 100) | int) -%}
+{%- set card_alpha = (card_alpha_pct // 100) | int ~ '.' ~ card_alpha_frac -%}
+{%- set card_blur_frac = '%02d' | format((card_blur_pct % 100) | int) -%}
+{%- set card_blur = (card_blur_pct // 100) | int ~ '.' ~ card_blur_frac -%}
+<style>
+    {% if poster and poster_img and poster_img['status'] > 0 %}
+    /* 大背景图拆到 ::before 这一层承载，**不能**把 opacity 加在 .main-content 上 ——
+       那会把整页内容（文字、毛玻璃卡片）一起变淡。
+       两个图层：先列的同尺寸遮罩（黑色，alpha = 1 - 不透明度），再列背景图。
+       遮罩的意义是保证「不透明白景图」时观感与从前完全一致（从前是 url 上直接套
+       linear-gradient(rgba(0,0,0,.5), ...) 压暗一半），背景图越淡遮罩也越小。
+       同一元素上单值的 background-repeat / position / size 会套用到所有图层，
+       所以这里写一次即可；伪元素盖不住内容（无 z-index 的 ::before 在内容之下）。 */
+    .main-content {
+        position: relative;
+        /* 毛玻璃元素块的全局旋钮（见上面的 card 注释）。
+           消费方在 main-v6.css / avatar-v6.css —— 每条 background 乘 --card-alpha、
+           每条 backdrop-filter 乘 --card-blur，这里只负责把值发下来。 */
+        --card-alpha: {{ card_alpha }};
+        --card-blur: {{ card_blur }};
+    }
+
+    .main-content::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        opacity: {{ poster_opacity }}%;
+        background:
+            linear-gradient(rgba(0, 0, 0, {{ poster_mask }}),
+                            rgba(0, 0, 0, {{ poster_mask }})),
+            url("{{ poster_img['data'] }}") no-repeat;
+        /* 横向恒为 center（裁剪器拖出来的是「只在预览生效」的 crop，模板不读）；
+           纵向固定贴顶（poster_pos_y 恒为 0，理由见上面的注释）。
+           两个值都是长手属性，会一起套用到遮罩层与图片层。 */
+        background-position: center {{ poster_pos_y }}%;
+        background-size: cover;
+    }
+    {% endif %}
+
+    {% if color_name and color_name['status'] > 0 %}
+    .mirage-text {
+        background: {{ color_name['data'] }};
+        background-size: 200% 200%;
+        color: transparent;
+        -webkit-background-clip: text;
+        background-clip: text;
+    }
+    {% endif %}
+
+    .page-header {
+        {% if banner and banner['status'] > 0 %}
+        background: url("{{ banner['data'] }}") no-repeat;
+        {% endif %}
+        background-position: center;
+        background-size: 100%;
+    }
+
+    .avatar-header {
+        {% if avatar_src %}
+        background-image: url("{{ avatar_src }}");
+        {% endif %}
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: 100%;
+    }
+</style>
+{% endmacro %}
+
+{% macro info_header(register=true, server_style=false) %}
+{%- set u = data['userInfo'] if data['userInfo'] is defined and data['userInfo'] else data -%}
+{%- set avatar_box = u['avatar'] if u['avatar'] is defined and u['avatar'] else {} -%}
+{%- set banner = avatar_box['banner'] if avatar_box['banner'] is defined else none -%}
+{%- set avatar_img = avatar_box['avatar'] if avatar_box['avatar'] is defined else none -%}
+{%- set color_name = avatar_box['colorName'] if avatar_box['colorName'] is defined else none -%}
+{%- set sign = avatar_box['sign'] if avatar_box['sign'] is defined else none -%}
+{# 头像槽位语义（与 info_header_style 里取图那段同源，改一边记得改另一边）：
+     - status == 0（含槽位缺席 / status 缺失）→ 自定义头像不显示；
+     - status > 0 → 显示 avatar.data（v3 起值域只剩 0/1，旧契约的"2 及以上自定义"已取消）；
+     - 两种情况下 data 取不到图都再回落到 dogTag；
+     - dogTag 也没有 → 整块隐藏，信息列左移接管这块位置（见 avatar-v6.css 的 .no-avatar）。 #}
+{%- set avatar_status = (avatar_img['status'] | int) if avatar_img and avatar_img['status'] is defined else 0 -%}
+{%- set dog_tag = u['dogTag'] if u['dogTag'] is defined and u['dogTag'] else '' -%}
+{%- set avatar_src = (avatar_img['data'] if avatar_status > 0 else '') or dog_tag -%}
+{%- set hide_avatar = not avatar_src -%}
+{# 有无个性签名 #}
+{%- set has_sign = sign and sign['status'] > 0 -%}
+{%- set clan_info = u['clanInfo'] if u['clanInfo'] is defined and u['clanInfo'] else none -%}
+{%- set name = u['userName'] -%}
+{%- set tag = (clan_info['tag'] if clan_info else '') or '' -%}
+{%- set tag_color = clan_info['color'] if clan_info else '#b3b3b3' -%}
+{%- set uid = u['accountId'] -%}
+{%- set created = u['accountCreateTime'] | int -%}
+{%- set server = server_cn(u['serverCn'] if u['serverCn'] is defined else u['server']) -%}
+{%- set banner_attrs = banner['attrs'] if banner and banner['attrs'] is defined else {} -%}
+{%- set banner_dark = (dget(banner_attrs, 'dark', 0) | int) == 1 -%}
+{# ▍banner_dark 只看 dark 值本身，**不带 status > 0 条件**。
+   曾经写成 `banner and banner['status'] > 0 and dget(banner, 'dark') == 1`，
+   结果是「关掉小背景图显示开关」会连带把深色白字也取消掉 ——
+   可这是两个独立的设置：status 管背景图显不显示，dark 管文字用黑字还是白字。
+   用户先设好深色、再临时关掉背景图预览时，不该把深色设置也一并丢掉。
+   （banner 槽位缺席 / dark 键没有时，dget 得 0，!= 1，照旧按浅色处理。）
+   ▍2026-09-30 契约 v3：dark 从顶层挪进 `banner.attrs.dark`（值口径不变，仍是 "0"/"1"，
+   所以这里读出来照样 `| int` 再比 1）。 #}
+{# 有无个性颜色：判据必须与 info_header_style 里 .mirage-text 的取色条件（status > 0）一致 ——
+   它们描述的是同一件事「这个名字有没有颜色」。
+   这里曾经写成 status != 2，与样式那边（> 0）不一致：status == 1 的用户名字照旧被上色，
+   却又被挂上 no-color-name，深色 banner 的白字（.dark-banner .no-color-name .mirage-text）
+   就把个性颜色整个盖掉了。改判据前先确认两边仍然同步。 #}
+{%- set has_color_name = color_name and color_name['status'] > 0 -%}
+<div class="page-header{% if banner_dark %} dark-banner{% endif %}">
+    <div class="masking-header{% if hide_avatar %} no-avatar{% endif %}">
+        <div class="avatar-header"></div>
+        <div class="clan-user-server">
+            <div class="user-info{% if not has_color_name %} no-color-name{% endif %}">
+                {% if tag %}
+                    <span style="color: {% if banner_dark %}#ffffff{% else %}{{ tag_color }}{% endif %};">[{{ tag }}]</span>
+                {% endif %}
+                <span class="mirage-text">{{ name }}</span></div>
+            {% if has_sign %}
+                {# 有签名：这列本来就四行，保持「服务器 / AccountId」一行显示 #}
+                <div class="user-server">服务器: {% if server_style %}<span class="server server-style">{{ server }}</span>{% else %}{{ server }}{% endif %} / Account Id: {{ uid }}</div>
+            {% else %}
+                {# 无签名：这行拆成两行（先账号 ID，再服务器） #}
+                <div class="user-account">Account Id: {{ uid }}</div>
+                <div class="user-server">所属服务器: {% if server_style %}<span class="server server-style">{{ server }}</span>{% else %}{{ server }}{% endif %}</div>
+            {% endif %}
+            {% if register %}
+                <div class="user-sign-time">注册时间: {{ time.strftime('%Y-%m-%d %H:%M', time.localtime(int(abs(created)))) }}
+                </div>
+            {% endif %}
+            {% if has_sign %}
+                <div class="user-signature">
+                    {{ sign['data'] }}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endmacro %}

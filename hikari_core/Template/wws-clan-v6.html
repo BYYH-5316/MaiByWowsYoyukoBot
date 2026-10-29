@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+    <meta charset="utf-8">
+    <title></title>
+    <link href="{{ template_path.as_uri() }}/main-v6.css" rel="stylesheet" type="text/css">
+    <link href="{{ template_path.as_uri() }}/avatar-v6.css" rel="stylesheet" type="text/css">
+    {# 无头像的公会用 tag 生成 BA 风格 logo 顶掉头像位，样式来自 ba-logo-v6.css #}
+    <link href="{{ template_path.as_uri() }}/ba-logo-v6.css" rel="stylesheet" type="text/css">
+</head>
+{# ============================================================
+   公会信息页（wws-clan-v6）
+
+   与 info 系共用同一套公共部件，本模板不再自带任何重复样式：
+   - 头部（公会侧专版） → partials/clan-v6-macros.html（info_header_style / info_header）
+     用户侧那版在 partials/user-v6-macros.html，两边已拆开各自维护
+   - PR 条 / 页脚 → partials/common-v6-macros.html（info_pr / footer_box）
+   - 页面宽度、板块间距、小节标题条、数据表格、统计卡、图表、时间行、页脚
+     → main-v6.css（.page-box / .random-header / .information-body /
+        .overview-change / .chart-box / .recnet-time / .footer）
+   - 无海报时的浅色主题、军团标签色修正 → main-v6.js
+   下面 <style> 只保留 info 系没有的公会专属部分（军团简介 / 军团设施）。
+   数据侧不做任何映射：组件直接吃公会对象本身。
+   ============================================================ #}
+{% from 'partials/clan-v6-macros.html' import info_header_style, info_header with context %}
+{% from 'partials/common-v6-macros.html' import info_pr, footer_box with context %}
+{{ info_header_style() }}
+<style>
+    /* 公会简介：沿用公共玻璃底 one-background-color */
+    .clan-desc {
+        margin: var(--gap-inner) 50px 0;
+        padding: 20px 30px;
+        border-radius: 20px;
+        font-size: 24px;
+        font-weight: normal;
+        line-height: 1.6;
+        color: #4a4a5a;
+        white-space: pre-wrap;
+    }
+
+    /* ---------- 军团设施：单卡分区 + 图标瓦片 ----------
+       设施条数会随版本增加（v6 初版硬编码 11 条，接口实际给 14 条），
+       所以不再「一个分类一张卡」，改成一张大卡里按分类分组，分类下平铺瓦片：
+       分类数、每类条数都自动跟着数据走，不会漏。 */
+    .facility-body {
+        margin: var(--gap-inner) 50px 0;
+        padding: 20px 24px 24px;
+        border-radius: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .facility-group {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    /* 分类标题：色点 + 名称（色点取该类建筑图标的底色） */
+    .facility-group-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 26px;
+        font-weight: normal;
+        color: #4a4a5a;
+    }
+
+    .facility-group-title > i {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .facility-group-title > em {
+        font-style: normal;
+        font-size: 22px;
+        color: #8b8fa0;
+    }
+
+    /* 瓦片网格：3 列，条数自动换行（分类内条数不是 3 的整数倍时留一个空位） */
+    .facility-tiles {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 13px;
+    }
+
+    .bf-tile {
+        position: relative;
+        overflow: hidden;
+        min-width: 0;
+        min-height: 96px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px 15px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.42);
+        border: 1px solid rgba(180, 160, 230, 0.28);
+    }
+
+    /* 建筑图标：接口给的 54×54 自带圆形底色的 svg，直接铺满方形槽位。
+       走背景图而不是 <img>，图挂了就留白，不会出现碎图标。 */
+    .bf-icon {
+        width: 54px;
+        height: 54px;
+        flex-shrink: 0;
+        border-radius: 50%;
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: 100% 100%;
+    }
+
+    .bf-main {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .bf-top {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+    }
+
+    .bf-name {
+        min-width: 0;
+        font-size: 26px;
+        color: #3c3c4c;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* 等级：满级紫 / 未满级绿由接口 fullLevelColor 决定，模板不判颜色 */
+    .bf-lv {
+        margin-left: auto;
+        flex-shrink: 0;
+        font-size: 23px;
+        font-weight: bold;
+    }
+
+    /* 加成说明：接口文案长短不一（「使用超级战舰每场战斗获得的全局经验值」就有 18 字），
+       所以这里不设 nowrap、不省略号 —— 放不下就换行，宁可这一格高一点，
+       也不要把接口给的信息吃掉。数值贴右侧对齐。 */
+    .bf-buff {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        min-width: 0;
+        font-size: 20px;
+        font-weight: normal;
+        line-height: 1.35;
+        color: #5f6472;
+    }
+
+    .bf-buff-text {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .bf-value {
+        margin-left: auto;
+        flex-shrink: 0;
+        font-weight: bold;
+    }
+
+    /* 等级进度条：贴瓦片底边，宽度 = level / maxLevel */
+    .bf-bar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 4px;
+        background: rgba(180, 160, 230, 0.25);
+    }
+
+    .bf-bar > i {
+        display: block;
+        height: 100%;
+    }
+</style>
+<body>
+<div class="main-content">
+    <div class="page-box">
+
+        {# ==================== 头部（info 系公共组件） ==================== #}
+        {{ info_header(register=true) }}
+
+        {# ==================== PR 条（info 系公共组件） ==================== #}
+        {% set stats = data['userStatisticsInfo'] %}
+        {% if stats['pr'] and stats['pr']['value'] > 0 %}
+            {{ info_pr(stats['pr']) }}
+        {% endif %}
+
+        {# ==================== 数据更新时间 ==================== #}
+        <div class="recnet-time">
+            <span class="time-item">数据更新：{{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())) }}</span>
+        </div>
+
+        {# ==================== 军团概况（info 系统计卡） ==================== #}
+        <div class="overview-change">
+            {# 最佳赛季：bestSeasonRating 可能是 null（没打过军团战），这时只留一行提示，
+               下面的数值留空 #}
+            {% set best_season = data['clanLeagueInfo']['bestSeasonRating'] %}
+            <div class="overview-change-item">
+                <div class="item-top one-background-color">
+                    {% if best_season %}
+                        <div class="stat-label">最佳赛季S{{ best_season['season'] }}</div>
+                        <div class="stat-value">{{ best_season['leagueName']['buff'] }} {{ best_season['divisionName'] }} {{ best_season['divisionRating'] }}</div>
+                    {% else %}
+                        <div class="stat-label">无军团战记录</div>
+                        <div class="stat-value"></div>
+                    {% endif %}
+                </div>
+                <div class="item-bottom">
+                    <div class="bottom-mini-item one-background-color">
+                        <div class="mini-label">军团活跃度</div>
+                        <div class="mini-value">{{ '%.1f' | format(stats['vitality']) }}%</div>
+                    </div>
+                    <div class="bottom-mini-item one-background-color">
+                        <div class="mini-label">军团成员</div>
+                        <div class="mini-value">{{ data['membersCount'] }}/{{ data['maxMembersCount'] }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="overview-change-item">
+                <div class="item-top one-background-color">
+                    <div class="stat-label">总体胜率</div>
+                    <div class="stat-value" style="color: {{ stats['winsData']['color'] }};">{{ '%.2f' | format(stats['winsPercentage']) }}%</div>
+                </div>
+                <div class="item-bottom">
+                    <div class="bottom-mini-item one-background-color">
+                        <div class="mini-label">人均在团</div>
+                        <div class="mini-value">{{ '%.0f' | format(stats['avgTimeInTheGroup']) }}天</div>
+                    </div>
+                    <div class="bottom-mini-item one-background-color">
+                        <div class="mini-label">人均经验</div>
+                        <div class="mini-value">{{ '{:,.0f}'.format(stats['expPerBattle']) }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="overview-change-item">
+                <div class="item-top one-background-color">
+                    <div class="stat-label">场均</div>
+                    <div class="stat-value" style="color: {{ stats['damageData']['color'] }};">{{ '{:,.0f}'.format(stats['damagePerBattle']) }}</div>
+                </div>
+                <div class="item-bottom">
+                    <div class="bottom-mini-item one-background-color">
+                        <div class="mini-label">人均战斗</div>
+                        <div class="mini-value">{{ '%.1f' | format(stats['battlesCount']) }}场</div>
+                    </div>
+                    <div class="bottom-mini-item one-background-color">
+                        <div class="mini-label">日均战斗</div>
+                        <div class="mini-value">{{ '%.2f' | format(stats['avgDayBattleCount']) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ==================== 军团战斗（info 系数据表格） ==================== #}
+        {% set league = data['clanLeagueInfo'] %}
+        {# lastSeason 是"当前赛季"，未必已经出现在 dataMap 里（实测 S35 就还没有数据），
+           所以先取赛季数据、再筛队伍，最后按是否有行决定兜底文案，避免整表空白或渲染报错 #}
+        {% set season = league['dataMap'][data['latest_season']] if (data['latest_season'] is defined and league['dataMap'][data['latest_season']] is defined) else none %}
+        {% set teams = [] %}
+        {% if league['battle'] and season %}
+            {% for key, team_name in [['alpha', 'Alpha'], ['bravo', 'Bravo']] %}
+                {% if season[key] is defined and season[key] and season[key]['battlesCount'] %}
+                    {% set _ = teams.push([team_name, season[key]]) %}
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+        <div class="random-header one-background-color">S{{ league['lastSeason'] }} 赛季军团战斗</div>
+        <div class="information-body one-background-color">
+            <div class="information-col">
+                <div class="information-col-item flex-2">队伍</div>
+                <div class="information-col-item flex-2">场次</div>
+                <div class="information-col-item flex-2">胜场</div>
+                <div class="information-col-item flex-5">当前段位</div>
+                <div class="information-col-item flex-5">最高段位</div>
+            </div>
+            {% for team_name, team in teams %}
+                <div class="information-col">
+                    <div class="information-col-item flex-2">{{ team_name }}</div>
+                    <div class="information-col-item flex-2">{{ team['battlesCount'] }}</div>
+                    <div class="information-col-item flex-2">{{ team['winsCount'] }}(<span style="color: {{ team['winsData']['color'] }};">{{ '%.2f' | format(team['wins']) }}%</span>)</div>
+                    <div class="information-col-item flex-5">
+                        <span class="league-tag"><i style="background: {{ team['leagueName']['color'] }};"></i>{{ team['leagueName']['buff'] }}{{ team['divisionName'] }} {{ team['divisionRating'] }}（{{ team['currentWinningStreak'] }}连胜）</span>
+                    </div>
+                    <div class="information-col-item flex-5">
+                        <span class="league-tag"><i style="background: {{ team['maxLeagueName']['color'] }};"></i>{{ team['maxLeagueName']['buff'] }}{{ team['maxDivisionName'] }} {{ team['maxPositionDivisionRating'] }}（{{ team['longestWinningStreak'] }}连胜）</span>
+                    </div>
+                </div>
+            {% endfor %}
+            {% if teams | length == 0 %}
+                <div class="information-col">
+                    <div class="information-col-item">本赛季暂无军团战数据</div>
+                </div>
+            {% endif %}
+        </div>
+
+        {# ==================== 公会简介 ==================== #}
+        {% if data['description'] %}
+        <div class="random-header one-background-color">军团简介</div>
+        <div class="clan-desc one-background-color">{{ data['description'] }}</div>
+        {% endif %}
+        {# ==================== 军团设施 ==================== #}
+        {# 分类表：分类名 / 分类色（取该类建筑图标的圆底色）/ 该类的 originName 列表。
+           接口的 buildingsInfos 是按 originName 字母序返回的，不按分类排，所以必须用
+           originName 认领，不能用数组下标（v5 就是按下标取的，顺序一变就全错）。
+           不在表里的 originName 交给下面的「其他」兜底 —— 接口以后再加建筑，
+           不加分类表也一定会显示出来，不会再出现「少显示几条」。 #}
+        {% set facility_groups = [
+            ['折扣', '#e64e3f', ['dry_dock', 'shipbuilding_factory']],
+            ['加成', '#3797da', ['coal_yard', 'steel_yard', 'paragon_yard']],
+            ['收入', '#20bb9b', ['academy', 'university', 'design_department']],
+            ['设施', '#f39b19', ['superships_home', 'treasury', 'headquarters']],
+            ['舰队', '#9a5ab5', ['monument', 'ships', 'vessels']]
+        ] %}
+        {% set known_origins = [] %}
+        {% for _name, _color, _origins in facility_groups %}
+            {% for _origin in _origins %}{% set _ = known_origins.push(_origin) %}{% endfor %}
+        {% endfor %}
+        {% set extra_origins = [] %}
+        {% for _building in data['buildingsInfos'] or [] %}
+            {% if _building['originName'] not in known_origins %}
+                {% set _ = extra_origins.push(_building['originName']) %}
+            {% endif %}
+        {% endfor %}
+        {% if extra_origins | length %}
+            {% set _ = facility_groups.push(['其他', '#8a8fa0', extra_origins]) %}
+        {% endif %}
+
+        <div class="random-header one-background-color">军团设施</div>
+        <div class="facility-body one-background-color">
+            {% for group_name, group_color, origins in facility_groups %}
+                {# 先收本类实际存在的建筑；本类一条都没有就整组不渲染（空标题不留） #}
+                {% set group_buildings = [] %}
+                {% for origin in origins %}
+                    {% for building in data['buildingsInfos'] or [] %}{% if building['originName'] == origin %}
+                        {% set _ = group_buildings.push(building) %}
+                    {% endif %}{% endfor %}
+                {% endfor %}
+                {% if group_buildings | length %}
+                    <div class="facility-group">
+                        <div class="facility-group-title">
+                            <i style="background: {{ group_color }};"></i>{{ group_name }}<em>{{ group_buildings | length }}</em>
+                        </div>
+                        <div class="facility-tiles">
+                            {% for building in group_buildings %}
+                                {# 图标槽位：接口新给的 image（54×54 自带圆形底色的 svg）。
+                                   旧接口没这个字段时退成一颗纯色圆点，不至于开天窗。 #}
+                                {% set icon = building['image'] if building['image'] is defined and building['image'] else none %}
+                                {% set color = building['fullLevelColor'] if building['fullLevelColor'] is defined and building['fullLevelColor'] else '#673AB7' %}
+                                {% set name = building['name']['key'] if building['name'] is defined and building['name']['key'] is defined else '' %}
+                                {% set level = building['level'] | default(0) | int %}
+                                {% set max_level = (building['maxLevel'] | default(1) | int) or 1 %}
+                                {# buff 整个对象、以及它内部的 cn / buff 两个字段都可能缺席（脏数据 /
+                                   旧接口），逐个判空 —— 这里抛异常整个渲染就白跑了 #}
+                                {% set buff = building['buff'] if building['buff'] is defined and building['buff'] else {} %}
+                                {% set buff_cn = buff['cn'] if buff['cn'] is defined else '' %}
+                                {% set buff_value = buff['buff'] if buff['buff'] is defined else '' %}
+                                <div class="bf-tile">
+                                    <i class="bf-icon" {% if icon %}style="background-image: url('{{ icon }}');"{% else %}style="background: {{ color }};"{% endif %}></i>
+                                    <div class="bf-main">
+                                        <div class="bf-top">
+                                            <span class="bf-name">{{ name }}</span>
+                                            <span class="bf-lv" style="color: {{ color }};">{{ level }}/{{ max_level }}</span>
+                                        </div>
+                                        {% if buff_cn %}
+                                            <div class="bf-buff">
+                                                <span class="bf-buff-text">{{ buff_cn }}</span>
+                                                {% if buff_value %}
+                                                    <span class="bf-value" style="color: {{ color }};">{{ buff_value }}</span>
+                                                {% endif %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    {# 等级进度条：满级紫 / 未满级绿，颜色直接吃接口的 fullLevelColor #}
+                                    <span class="bf-bar"><i style="width: {{ (level * 100 / max_level) | round(1) }}%; background: {{ color }};"></i></span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        {# ==================== 赛季段位图表（info 系图表容器） ==================== #}
+        <div class="random-header one-background-color">赛季段位</div>
+        <div class="chart-box one-background-color">
+            <div class="chart-bar"></div>
+        </div>
+
+        {# ==================== 页脚（info 系公共组件） ==================== #}
+        {{ footer_box() }}
+    </div>
+</div>
+</body>
+{# echarts 优先用模板目录里那份（截图服务在 file:// 下跑，离线也得能出图）。
+   ▍别写 pathlib 的 `template_path / "echarts.js"`：那在 Jinja 下**恒真**（拼出来的是对象，
+     不查文件在不在），在 JS/Nunjucks 下**恒假**（对象 / 字符串 = NaN）—— 静默走错分支、
+     页面上不报错，只是 echarts 换成了 CDN。文件在不在只有 Python 侧知道，
+   所以判断走 asset_exists()（清单来自 js_render.build_payload 的 assets）。 #}
+{% if asset_exists("echarts.js") %}
+    <script src="{{ template_path.as_uri() }}/echarts.js"></script>
+{% else %}
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.3.3/dist/echarts.js"></script>
+{% endif %}
+<script src="{{ template_path.as_uri() }}/main-v6.js" type="text/javascript"></script>
+<script>
+    window.onload = function () {
+        drawChart();
+    };
+    description = [
+        {% for each in data['clanLeagueInfo']['alphaCharts'] %}
+            {% if each['source'] == each['maxSource']  %}
+                '',
+            {% else %}
+                '{{ each['leagueName']['buff'] }}{{ each['divisionName'] }}{{ each['divisionRating'] }}',
+            {% endif %}
+        {% endfor %}
+    ]
+    max_description = [
+        {% for each in data['clanLeagueInfo']['alphaCharts'] %}
+            '{{ each['maxLeagueName']['buff'] }}{{ each['maxDivisionName'] }}{{ each['maxPositionDivisionRating'] }}',
+        {% endfor %}
+    ]
+    function drawChart() {
+        var Chart = echarts.init(document.querySelector('.chart-bar'));
+        var Option = {
+            animation: false,
+            xAxis: {
+                type: 'category',
+                data: [{% for each in data['clanLeagueInfo']['alphaCharts'] %}
+                    {{ each['season'] }},
+                {% endfor %}]
+            },
+            yAxis: {
+                type: 'value',
+                interval: 100,
+                min: function(value){
+                    return parseInt(value.min/100)*100;
+                },
+                max: function(value){
+                    return parseInt(value.max/100 +1 )*100;
+                },
+                axisLabel: {
+                    textStyle: {
+                        fontSize: 20,
+                        fontWeight:'bold',
+                    },
+                    formatter: function (value, index) {
+                        const temp = {
+                            1000:'青铜',
+                            1300:'白银',
+                            1600:'黄金',
+                            1900:'白金',
+                            2200:'紫金',
+                        }
+                        return temp[value];
+                    }
+                }
+            },
+            series: [
+                {
+                    name: '结算分数',
+                    data: [{% for each in data['clanLeagueInfo']['alphaCharts'] %}
+                        {{ each['source'] }},
+                    {% endfor %}],
+                    label: {
+                        show: true,
+                        position: 'bottom',
+                        color:'red',
+                        formatter(v){
+                            return description[v.dataIndex] + ''
+                        }
+                    },
+                    type: 'line',
+                },
+                {
+                    name: '最高分数',
+                    data: [{% for each in data['clanLeagueInfo']['alphaCharts'] %}
+                        {{ each['maxSource'] }},
+                    {% endfor %}],
+                    label: {
+                        show: true,
+                        position: 'top',
+                        color:'blue',
+                        formatter(v){
+                            return max_description[v.dataIndex] + ''
+                        }
+                    },
+                    type: 'line',
+                }
+            ],
+            legend: {
+                orient: 'horizontal',
+                x: 'center',
+                y: 'top',
+                itemGap: 5,
+                textStyle: {
+                    fontSize: 20,
+                },
+                data:['结算分数','最高分数'],
+                backgroundColor: 'rgba(0,0,0,0)',
+                borderColor: '#ccc',
+                borderWidth: 0,
+                padding: 5,
+                itemGap: 10,
+                itemWidth: 20,
+                itemHeight: 14,
+            }
+        };
+        Chart.setOption(Option);
+    }
+</script>
+</html>
