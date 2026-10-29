@@ -10,7 +10,7 @@
 | 插件类型 | `other`（其他） |
 | 插件版本 | 1.0.0 |
 | MaiBot 移植与维护 | 白云鱼海 |
-| 运行环境 | MaiBot 1.x（`host_application` 1.0.0–1.99.99）+ 插件 SDK 2.6–2.99 |
+| 运行环境 | MaiBot 1.0.0–1.3.99（实测 1.3.15）+ 插件 SDK 2.6.0–2.16.99（实测 2.16.0） |
 | 内置渲染核心 | hikari-core `2.0.1`（随插件分发，不走 PyPI） |
 | 数据源 | yuyuko API `https://v3-api.wows.shinoaki.com` |
 | 仓库 | https://github.com/BYYH-5316/MaiByWowsYoyukoBot |
