@@ -23,6 +23,9 @@
     "max_version": "2.16.99"
   },
   "plugin_type": "other",
+  "display": {
+    "icon": { "type": "local", "value": "assets/icon.png" }
+  },
   "dependencies": [
     { "type": "python_package", "name": "loguru", "version_spec": ">=0.7.0" },
     { "type": "python_package", "name": "APScheduler", "version_spec": ">=3.10.1" },
