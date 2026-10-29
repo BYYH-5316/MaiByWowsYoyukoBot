@@ -6,13 +6,13 @@
   "description": "战舰世界（World of Warships）战绩查询：/wws 指令渲染水表图片，数据来自 yuyuko API。MaiBot 移植版，基于 AstrBot 插件 AstrByWowsYuyukoBot（西行寺雨季）内置 hikari-core v2.0.1。",
   "author": {
     "name": "白云鱼海",
-    "url": "https://github.com/BYYH-5316/public"
+    "url": "https://github.com/BYYH-5316/MaiByWowsYoyukoBot"
   },
   "license": "MIT",
   "urls": {
-    "repository": "https://github.com/BYYH-5316/public",
-    "homepage": "https://github.com/BYYH-5316/public",
-    "issues": "https://github.com/BYYH-5316/public/issues"
+    "repository": "https://github.com/BYYH-5316/MaiByWowsYoyukoBot",
+    "homepage": "https://github.com/BYYH-5316/MaiByWowsYoyukoBot",
+    "issues": "https://github.com/BYYH-5316/MaiByWowsYoyukoBot/issues"
   },
   "host_application": {
     "min_version": "1.0.0",
@@ -22,7 +22,7 @@
     "min_version": "2.6.0",
     "max_version": "2.99.99"
   },
-  "plugin_type": "extension",
+  "plugin_type": "other",
   "dependencies": [
     { "type": "python_package", "name": "loguru", "version_spec": ">=0.7.0" },
     { "type": "python_package", "name": "APScheduler", "version_spec": ">=3.10.1" },

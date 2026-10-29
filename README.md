@@ -6,12 +6,14 @@
 | 项 | 值 |
 |---|---|
 | 插件 ID | `community.wows-yuyuko` |
+| 插件名称（市场标题） | 战舰世界战绩查询 |
+| 插件类型 | `other`（其他） |
 | 插件版本 | 1.0.0 |
 | MaiBot 移植与维护 | 白云鱼海 |
 | 运行环境 | MaiBot 1.x（`host_application` 1.0.0–1.99.99）+ 插件 SDK 2.6–2.99 |
 | 内置渲染核心 | hikari-core `2.0.1`（随插件分发，不走 PyPI） |
 | 数据源 | yuyuko API `https://v3-api.wows.shinoaki.com` |
-| 仓库 | https://github.com/BYYH-5316/public |
+| 仓库 | https://github.com/BYYH-5316/MaiByWowsYoyukoBot |
 
 ## 出处与致谢
 
@@ -75,7 +77,7 @@ pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple
 
 ```bash
 docker exec -it maim-bot-core sh -lc \
-  'cd /MaiMBot/plugins/wows-yuyuko && uv pip install -r requirements.txt \
+  'cd /MaiMBot/plugins/MaiByWowsYoyukoBot && uv pip install -r requirements.txt \
    -i https://mirrors.aliyun.com/pypi/simple --python /MaiMBot/.venv/bin/python'
 ```
 
@@ -98,17 +100,18 @@ docker exec -it maim-bot-core sh -lc \
 
 ```bash
 cd <麦麦根目录>/plugins
-git clone https://github.com/BYYH-5316/public wows-yuyuko
+git clone https://github.com/BYYH-5316/MaiByWowsYoyukoBot
 ```
 
-没有 git 就下载 ZIP 解压到 `plugins/` 下。**目录名随意**：插件数据目录按 `_manifest.json` 的 `id`
+没有 git 就下载 ZIP 解压到 `plugins/` 下。**主文件夹名建议与仓库同名**（`MaiByWowsYoyukoBot`，全英文，
+避免中文/空格路径在部分环境下的编码问题）；插件数据目录按 `_manifest.json` 的 `id`
 （`community.wows-yuyuko`）命名，与源码目录名无关，改名不会丢数据。
 
 | 部署方式 | 插件源码位置 | 插件数据位置（自动创建） |
 |---|---|---|
-| Windows 一键包 | `MaiBot\plugins\wows-yuyuko\` | `MaiBot\data\plugins\community.wows-yuyuko\` |
-| Windows 裸 Python | `<安装目录>\plugins\wows-yuyuko\` | `<安装目录>\data\plugins\community.wows-yuyuko\` |
-| Docker | 宿主 `/root/data/MaiMBot/plugins/wows-yuyuko` → 容器 `/MaiMBot/plugins/wows-yuyuko` | 宿主 `/root/data/MaiMBot-plugin-data/community.wows-yuyuko` → 容器 `/MaiMBot/data/plugins/community.wows-yuyuko` |
+| Windows 一键包 | `MaiBot\plugins\MaiByWowsYoyukoBot\` | `MaiBot\data\plugins\community.wows-yuyuko\` |
+| Windows 裸 Python | `<安装目录>\plugins\MaiByWowsYoyukoBot\` | `<安装目录>\data\plugins\community.wows-yuyuko\` |
+| Docker | 宿主 `/root/data/MaiMBot/plugins/MaiByWowsYoyukoBot` → 容器 `/MaiMBot/plugins/MaiByWowsYoyukoBot` | 宿主 `/root/data/MaiMBot-plugin-data/community.wows-yuyuko` → 容器 `/MaiMBot/data/plugins/community.wows-yuyuko` |
 
 > 数据目录存的是浏览器内核、战舰资源、头像缓存与 `admin.txt`。重装 / 更新插件时**不要删它**，
 > 否则下次启动要重新下载约 400 MB。
@@ -159,7 +162,7 @@ docker logs -f --since 2m maim-bot-core 2>&1 | grep -E 'wows|hikari|模板|战�
 ## 5. 更新
 
 ```bash
-cd <麦麦根目录>/plugins/wows-yuyuko
+cd <麦麦根目录>/plugins/MaiByWowsYoyukoBot
 git pull            # 或重新下载 ZIP 覆盖（别覆盖 config.toml / config_back/）
 ```
 
@@ -327,14 +330,14 @@ yuyuko 的昵称搜索是**精确匹配**，实测结果：
 | 多人同时查询明显变慢 | 渲染是单浏览器串行（插件内置渲染锁），故意如此 | 正常排队；并发会重复拉起浏览器进程，不要去掉 |
 | 警告「模板清单里没有 nunjucks.min.js / hikari-render.js」 | 上游清单不带这两个 JS | 正常，渲染器随插件分发在 `hikari_core/Template/` 下 |
 | 警告「未加载 data_user 私有模块…wws auth 将提示未部署」 | 上游可选私有模块没部署 | 正常，本插件不使用 `wws auth` |
-| WebUI 插件详情读不出 README | 插件根目录缺 `README.md`（读不到才去 GitHub Raw 拉上游 README） | 确保 `plugins/wows-yuyuko/README.md` 存在（就是本文件） |
+| WebUI 插件详情读不出 README | 插件根目录缺 `README.md`（读不到才去 GitHub Raw 拉上游 README） | 确保 `plugins/MaiByWowsYoyukoBot/README.md` 存在（就是本文件） |
 | 改完代码没生效 | 需要重启 | Windows 重启麦麦；Docker `docker restart maim-bot-core` |
 | 插件列表里版本号还是旧的 | `_manifest.json` 没更新或未重启 | 改 `version` 后重启，必要时在插件页点「刷新」 |
 
 ## 11. 卸载
 
 1. WebUI 里停用插件（触发清理：停 APScheduler、关浏览器进程、清 `file_img_temp/`）；
-2. 删源码目录 `plugins/wows-yuyuko`；
+2. 删源码目录 `plugins/MaiByWowsYoyukoBot`；
 3. 需要回收磁盘再删数据目录 `data/plugins/community.wows-yuyuko`
    （想重装就留着，`browsers/` 与 `ship_cache/` 都能直接复用）。
 
