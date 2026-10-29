@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "id": "community.wows-yuyuko",
   "name": "战舰世界战绩查询",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "战舰世界（World of Warships）战绩查询：/wws 指令渲染水表图片，数据来自 yuyuko API。MaiBot 移植版，基于 AstrBot 插件 AstrByWowsYuyukoBot（西行寺雨季）内置 hikari-core v2.0.1。",
   "author": {
     "name": "白云鱼海",

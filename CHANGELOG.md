@@ -1,5 +1,11 @@
 # 更新日志
 
+## 1.0.1
+
+仅新增插件图标，功能与 1.0.0 完全一致。
+
+- 新增 `assets/icon.png`，通过 `_manifest.json` 的 `display.icon` 声明，用于 WebUI 插件页与插件市场展示
+
 ## 1.0.0
 
 首个 MaiBot 版本。

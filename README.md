@@ -8,7 +8,7 @@
 | 插件 ID | `community.wows-yuyuko` |
 | 插件名称（市场标题） | 战舰世界战绩查询 |
 | 插件类型 | `other`（其他） |
-| 插件版本 | 1.0.0 |
+| 插件版本 | 1.0.1 |
 | 插件图标 | `assets/icon.png`（经 manifest 的 `display.icon` 声明，显示在 WebUI 插件页） |
 | MaiBot 移植与维护 | 白云鱼海 |
 | 运行环境 | MaiBot 1.0.0–1.3.99（实测 1.3.15）+ 插件 SDK 2.6.0–2.16.99（实测 2.16.0） |
@@ -167,10 +167,10 @@ cd <麦麦根目录>/plugins/MaiByWowsYoyukoBot
 git pull            # 或重新下载 ZIP 覆盖（别覆盖 config.toml / config_back/）
 ```
 
-然后按 4.3 重启。升级提示中的版本号来自 `_manifest.json` 的 `version`，本版本为 `1.0.0`。
+然后按 4.3 重启。升级提示中的版本号来自 `_manifest.json` 的 `version`，本版本为 `1.0.1`。
 
 若使用 WebUI 的插件市场安装 / 升级，本仓库的 Git Tag 必须与 `_manifest.json` 的 `version` 完全一致
-（例如 tag `1.0.0` 对应 `"version": "1.0.0"`），否则市场会报版本不匹配。
+（例如 tag `1.0.1` 对应 `"version": "1.0.1"`），否则市场会报版本不匹配。
 
 ## 6. 配置项
 
