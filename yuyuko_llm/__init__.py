@@ -42,6 +42,7 @@ from .query import (
     build_ships_command,
     resolve_account_id,
     resolve_identity,
+    resolve_ship_name,
 )
 from .tool_spec import (
     BIND_GUIDE,
@@ -87,5 +88,6 @@ __all__ = [
     "normalize_battle_mode",
     "resolve_account_id",
     "resolve_identity",
+    "resolve_ship_name",
     "user_error_text",
 ]

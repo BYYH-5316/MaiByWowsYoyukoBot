@@ -160,6 +160,46 @@ async def resolve_account_id(server: str, nickname: str) -> int | None:
         return None
 
 
+async def resolve_ship_name(raw: str) -> str | None:
+    """纯数字船名换成上游规范名（``190`` → ``U-190``、``4501`` → ``U-4501``）。
+
+    ▍为什么必须换
+    hikari 的 ``_extract_day_and_date_params`` 会把指令里**所有** ≤3 位纯数字 token
+    当天数抠掉：``ship recent 190 190`` 抠完没有船名，直接报
+    「您似乎准备用me查询单船战绩，请检查是否缺少船名」。上游百科搜索对 ``190``
+    只回一条 U-190，用 ``nameCn`` 换名后指令就正常了。
+    """
+    if not raw or not raw.isdigit():
+        return None
+    url = f"{hikari_config.yuyuko_url}/public/wows/encyclopedia/ship/search"
+    params = {
+        "country": "",
+        "level": "",
+        "shipName": raw,
+        "shipType": "",
+        "groupType": "default",
+    }
+    try:
+        from hikari_core.core.http_client import get_client_yuyuko
+        from hikari_core.core.model import Hikari_Model
+
+        client = await get_client_yuyuko(Hikari_Model().UserInfo)
+        resp = await client.get(url, params=params, timeout=20)
+        result = resp.json()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"纯数字船名 {raw!r} 解析失败: {e!r}")
+        return None
+    rows = result.get("data") or []
+    # 有歧义就不猜：只接受唯一命中，多个候选交给调用方原样去查
+    if result.get("code") != 200 or len(rows) != 1:
+        return None
+    name = str(rows[0].get("nameCn") or "")
+    if not name or name == raw:
+        return None
+    logger.info(f"纯数字船名 {raw} 换成上游规范名 {name}")
+    return name
+
+
 def _with_identity(command_text: str, identity: dict[str, str] | None) -> str:
     """把「服务器 + 昵称」前置到指令前，让 hikari 走查别人的正常路径。
 

@@ -72,6 +72,7 @@ from .yuyuko_llm import (
     classify_error,
     resolve_account_id,
     resolve_identity,
+    resolve_ship_name,
     user_error_text,
 )
 from hikari_core import callback_hikari, init_hikari
@@ -439,8 +440,11 @@ def _ship_missing_text(ship: str, hikari: Any) -> str:
     """
     data = str(getattr(getattr(hikari, "Output", None), "Data", "") or "")
     if "找不到船" in data:
+        # 上游的 userShip 搜索只看「这个号名下有的船」：没买过 / 一场没开过的船
+        # 同样回「找不到船」，和船名写错分不出来。所以两种原因并列说，别只怪船名。
         return (
-            f"没找到「{ship}」这艘船：可能船名写错了，也可能这艘船不在当前默认账号名下。"
+            f"「{ship}」在当前默认账号下查不到：可能是船名写错，"
+            "也可能这个号没买过 / 没开过这艘船（没打过的船不在单船查询里）。"
             "换完整船名 / 英文名再试；绑了多个号的话发【/wws 切换绑定】换默认账号再查~"
         )
     return (
@@ -1713,6 +1717,15 @@ class WowsYuyukoPlugin(MaiBotPlugin):
                 hikari, ship, stream_id, rerun=lambda: raw_call(command_text)
             )
 
+        if ship and ship.isdigit():
+            # hikari 的 _extract_day_and_date_params 会把指令里所有 ≤3 位纯数字 token
+            # 当天数抠掉，「190recent190」抠完没有船名 → 报「缺少船名」→ 旧逻辑退回
+            # 整账号近期，用户看到一张账号水表。先换成 U-190 再发指令。
+            resolved = await resolve_ship_name(ship)
+            if resolved:
+                logger.info(f"[wows] 纯数字船名 {ship} 换成 {resolved}")
+                ship = resolved
+
         if kind == "ship_recent" and ship and days:
             hikari = await call(build_ship_recent_command(ship, days))
             if hikari.Status == "success":
@@ -1747,11 +1760,22 @@ class WowsYuyukoPlugin(MaiBotPlugin):
                 logger.info(f"[wows] @ 单船近期 {ship} 查不到该船数据，直接说明原因")
                 return _MentionOutcome(hikari.failed(_ship_missing_text(ship, hikari)), kind, days)
 
-            logger.info(f"[wows] @ 单船近期未命中（{ship} / {days} 天），退回账号近期")
-            hikari = await call(build_recent_command(days))
-            if hikari.Status == "success":
-                return _MentionOutcome(hikari, "recent", days)
-            return _MentionOutcome(await call(build_account_command()), "account")
+            # 既不空窗口、也不缺船数据（例如指令没解析出船名）时，以前会退回账号近期，
+            # 用户要单船却收到一张整账号水表——这正是「190recent190 出了 recent190」。
+            # 单船请求一律不拿账号数据顶替，如实说明并让用户换写法。
+            detail = str(getattr(getattr(hikari, "Output", None), "Data", "") or "").strip()
+            logger.info(
+                f"[wows] @ 单船近期未命中（{ship} / {days} 天），不拿账号近期顶替: {detail[:60]}"
+            )
+            hint = f"（上游：{detail[:60]}）" if detail else ""
+            return _MentionOutcome(
+                hikari.failed(
+                    f"「{ship}」的单船近期没查到数据，没有拿整账号的战绩顶替。"
+                    f"换完整船名 / 英文名再试~{hint}"
+                ),
+                kind,
+                days,
+            )
 
         if kind == "ship" and ship:
             hikari = await call(build_ship_command(ship))
@@ -1760,8 +1784,16 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             if _ship_missing(hikari):
                 logger.info(f"[wows] @ 单船未命中（{ship}），直接说明原因，不发总表")
                 return _MentionOutcome(hikari.failed(_ship_missing_text(ship, hikari)), kind)
-            logger.info(f"[wows] @ 单船未命中（{ship}），退回账号总表")
-            return _MentionOutcome(await call(build_account_command()), "account")
+            detail = str(getattr(getattr(hikari, "Output", None), "Data", "") or "").strip()
+            logger.info(f"[wows] @ 单船未命中（{ship}），不拿账号总表顶替: {detail[:60]}")
+            hint = f"（上游：{detail[:60]}）" if detail else ""
+            return _MentionOutcome(
+                hikari.failed(
+                    f"「{ship}」的生涯数据没查到，没有拿整账号的顶替。"
+                    f"换完整船名 / 英文名再试~{hint}"
+                ),
+                kind,
+            )
 
         if kind == "recent" and days:
             hikari = await call(build_recent_command(days))
@@ -2255,6 +2287,9 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             return {"success": True, "content": hint}
         if select_index is None:
             ship = self._resolve_ship(ship, kwargs)
+        if ship.isdigit():
+            # hikari 会把 ≤3 位纯数字 token 当天数抠掉（190 → U-190 必须先换名）
+            ship = await resolve_ship_name(ship) or ship
         return await self._run_tool(
             kwargs,
             build_ship_command(ship, server, nickname),
@@ -2412,6 +2447,9 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             return {"success": True, "content": hint}
         if select_index is None:
             ship = self._resolve_ship(ship, kwargs)
+        if ship.isdigit():
+            # hikari 会把 ≤3 位纯数字 token 当天数抠掉（190 → U-190 必须先换名）
+            ship = await resolve_ship_name(ship) or ship
         days = self._resolve_days(days, kwargs)
         days_used = _clamp_days(days)
         if days_used:
