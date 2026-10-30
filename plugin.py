@@ -117,8 +117,16 @@ _CN_DIGITS = {
     "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
     "五": 5, "六": 6, "七": 7, "八": 8, "九": 9,
 }
+# 月份必须带「个」：不带的「九月七日」是船名（用户实测有这条船），当日期或时长都会丢船
 _CN_TIME_RE = re.compile(
-    r"(?:近|最近)?\s*(\d{1,3}|[一二两三四五六七八九十]{1,3})\s*个?\s*(月|天|周)"
+    r"(?:近|最近)?\s*(\d{1,3}|[一二两三四五六七八九十]{1,3})\s*(个\s*月|天|周)"
+)
+
+# 「西西里recent36」「西西里近期95」：带 recent / 近期 的裸数字就是天数。
+# 后面跟着 场/把/局/艘 时不算——那是「最近 30 把」这种局数，不是天数。
+_RECENT_NUM_RE = re.compile(
+    r"(?<![A-Za-z])(?:recent|近期|最近)\s*(\d{1,3})(?!\s*(?:[A-Za-z0-9]|场|把|局|次|艘|条|只|个))",
+    re.IGNORECASE,
 )
 
 
@@ -151,8 +159,13 @@ def _days_in_text(text: str) -> int | None:
         number = _cn_to_int(match.group(1))
         if number:
             unit = match.group(2)
-            factor = 30 if unit == "月" else 7 if unit == "周" else 1
+            factor = 30 if unit.endswith("月") else 7 if unit.endswith("周") else 1
             return _clamp_days(number * factor)
+    match = _RECENT_NUM_RE.search(clean)
+    if match:
+        number = _cn_to_int(match.group(1))
+        if number:
+            return _clamp_days(number)
     for words, days in _TIME_WORD_DAYS:
         if any(word in clean for word in words):
             return days
@@ -178,10 +191,13 @@ def _ship_in_text(text: str) -> str:
     # 「AL信浓」「ARP大和」「HSF哈巴」这些联动船的前缀本身就是船名的一部分。
     value = _EN_NOISE_RE.sub(" ", value)
     value = value.replace("的", " ")
-    value = re.sub(r"[^\w]+", " ", value, flags=re.UNICODE)
+    # 「recent36」剥掉 recent 后剩一串数字，别让它混进船名；
+    # 但 U-190 / I-56 / S-189 里的数字是船名的一部分（前面连着字母或连字符），保留
+    value = re.sub(r"(?<![\w-])\d{1,4}(?![\w-])", " ", value)
+    value = re.sub(r"[^\w-]+", " ", value, flags=re.UNICODE)
     # 「AL 信浓」这种带空格的写法会被上游当成「服务器 昵称」参数，拼回去
     value = re.sub(r"(?<=[A-Za-z])\s+(?=[\u4e00-\u9fff])", "", value)
-    value = re.sub(r"\s+", " ", value).strip()
+    value = re.sub(r"\s+", " ", value).strip(" -")
     if not value or len(value) > 24 or value.isdigit():
         return ""
     return value
@@ -347,6 +363,19 @@ _DEFAULT_MENTION_KEYWORDS = ("水表", "战绩", "查一下", "查查", "查询"
 
 # 一条消息算不算「战绩查询」：用来记下最近的查询发送者（见 _PENDING_QUERY_TTL）
 _QUERY_HINT_RE = re.compile(r"水表|战绩|场均|胜率|recent|wws", re.I)
+
+# 配置关键词之外、语义上明确是查询的句式。裸「最近 / 近期」不算：
+# 「最近手感不好」这种闲聊也会被当成查询，平白往群里甩一张水表。
+_EXTRA_QUERY_CUES = (
+    re.compile(r"(?<![A-Za-z])recent(?![A-Za-z])", re.IGNORECASE),
+    re.compile(r"近期\s*\d{1,3}"),
+    re.compile(r"查\s*[我咱俺]"),
+)
+
+# 只有用户原话真的提到「绑定」才允许 wws_bind 落地：
+# 实测模型在私聊里凭空调了一次 wws_bind，把默认账号从 A 换成了 B，
+# 之后的「查我」全都查到了别人号上，用户看到的是「没有出战记录」。
+_BIND_INTENT_RE = re.compile(r"绑定|绑|bind", re.IGNORECASE)
 
 # 「@机器人 + 自己查自己」的判定：出现「我 / 咱 / 俺」才算自己；
 # 出现「帮 / 给 / 替 / 他 / 她 / 群友」这类转指就不抢，交回模型，
@@ -1462,7 +1491,11 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         if not keywords:
             keywords = list(_DEFAULT_MENTION_KEYWORDS)
         clean = _strip_at_tokens(text)
-        return any(word in clean for word in keywords)
+        if any(word in clean for word in keywords):
+            return True
+        # 「西西里recent36」「西西里近期95」「查我9个月九月七日」都不带配置关键词，
+        # 以前全部落到模型路径（回复模型看不到工具结果，数字靠编）
+        return any(pattern.search(clean) for pattern in _EXTRA_QUERY_CUES)
 
     @staticmethod
     def _at_display_name(text: str, target: str) -> str:
@@ -1989,6 +2022,14 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         if not text:
             return False, None
         return True, _days_in_text(text)
+
+    def _original_text(self, kwargs: dict[str, Any]) -> str:
+        """回查触发消息原文；拿不到返回空串（调用方按「无从判断」处理）。"""
+        try:
+            ctx = self._tool_ctx(kwargs)
+            return self._recent_text(ctx.stream_id, ctx.group_id, ctx.user_id)
+        except Exception:  # noqa: BLE001
+            return ""
 
     @staticmethod
     def _with_window(
@@ -2543,6 +2584,19 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         self, nickname: str = "", server: str = "", **kwargs: Any
     ) -> dict[str, Any]:
         server, nickname = _identity(server, nickname)
+        text = self._original_text(kwargs)
+        if text and not _BIND_INTENT_RE.search(_strip_at_tokens(text)):
+            logger.info(
+                f"[wows] 原话没要求绑定，拒绝模型调用 wws_bind: 昵称={nickname!r} 消息={text[:40]!r}"
+            )
+            return {
+                "success": True,
+                "content": (
+                    "用户这条消息没有要求绑定账号，不要调用 wws_bind，也不要把聊天里出现的昵称写进绑定。"
+                    "只是查自己的战绩就直接调用查询工具；确实要绑定时，让用户明确说「绑定」"
+                    "并给出服务器和游戏内昵称。"
+                ),
+            }
         command = await _bind_by_aid(server, nickname) or build_bind_command(server, nickname)
         return await self._run_tool(kwargs, command, "bind", "wws_bind")
 
