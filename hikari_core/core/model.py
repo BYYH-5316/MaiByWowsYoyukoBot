@@ -16,7 +16,7 @@ class Func(Protocol):
 
 class UserInfo_Model(BaseModel):
     Platform: str = 'QQ'
-    PlatformId: str = '2622749113'
+    PlatformId: str = '10000'  # 占位符：接入端必须传入真实平台 ID
     BotId: str = 'None'
     GroupId: Optional[str] = None
 

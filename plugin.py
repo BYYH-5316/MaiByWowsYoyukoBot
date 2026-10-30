@@ -80,7 +80,8 @@ from hikari_core import callback_hikari, init_hikari
 PLATFORM = "QQ"
 
 # 近期查询的天数上限（防止模型填 99999 把上游拖死）
-MAX_RECENT_DAYS = 90
+# yuyuko 的 recent 接口硬上限是一年，实测 366 天可用、367 天回「day:最大查询时间一年」
+MAX_RECENT_DAYS = 366
 
 def _identity(server: str | None, nickname: str | None) -> tuple[str, str]:
     """统一「查自己 / 查别人」的口径：只给一个也算给了，交给拼装层处理。"""
@@ -100,8 +101,10 @@ def _clamp_days(days: int | None) -> int | None:
 
 # 中文时间说法 -> 天数；数字写法（90 天 / 两个月）单独解析
 _TIME_WORD_DAYS = (
-    (("两个月", "近两个月", "这俩月"), 60),
+    (("近一年", "一年", "12个月", "十二个月"), 360),
+    (("半年", "六个月", "近半年"), 180),
     (("三个月",), 90),
+    (("两个月", "近两个月", "这俩月"), 60),
     (("这个月", "这一个月", "本月", "一个月", "近一个月"), 30),
     (("这周", "本周", "一周", "近一周", "这礼拜"), 7),
     (("这几天", "这三天", "三天"), 3),
@@ -114,7 +117,7 @@ def _days_in_text(text: str) -> int | None:
     """从用户原话里抠天数；只是为了兜住模型漏填的 days，抠不出就返回 None。"""
     if not text:
         return None
-    clean = _AT_MARKUP_RE.sub(" ", text)
+    clean = _strip_at_tokens(text)
     match = re.search(r"(\d{1,3})\s*(?:个)?\s*月", clean)
     if match:
         return _clamp_days(int(match.group(1)) * 30)
@@ -135,7 +138,7 @@ def _ship_in_text(text: str) -> str:
     """
     if not text:
         return ""
-    value = _AT_MENTION_RE.sub(" ", text)
+    value = _strip_at_tokens(text)
     for word in _MENTION_NOISE_WORDS:
         value = value.replace(word, " ")
     # 「近7天」「最近90天」一起剥，别留下孤零零的「近」
@@ -210,8 +213,9 @@ def _p_ship(required: bool = False) -> ToolParameterInfo:
 def _p_days() -> ToolParameterInfo:
     return _p_int(
         "days",
-        "统计最近多少天（默认 7，最大 90）。用户提了时间就必须显式填，不要省："
-        "今天=1、昨天=2、这几天=3、这周/一周=7、这一个月/30 天=30、两个月=60、三个月=90。",
+        "统计最近多少天（默认 7，最大 366=一年）。用户提了时间就必须显式填，不要省："
+        "今天=1、昨天=2、这几天=3、这周/一周=7、这一个月/30 天=30、两个月=60、三个月=90、"
+        "半年=180、一年=360。",
     )
 
 
@@ -234,9 +238,12 @@ _TOKEN_FREE_COMMANDS = {"", "help", "帮助"}
 # 允许「@机器人 /wws xxx」「/wws xxx」「wws xxx」三种写法。
 # 指令词先收一小池口语词进正则，具体哪些生效由配置 `trigger.command_aliases` 决定：
 # 正则只负责把「可能是指令」的消息捞出来，配置决定要不要接（见 _activation_ok）。
+# 前缀要连原始 @ 码一起吃掉：上游约定 @ 由接入端处理，但接入端若把
+# `[CQ:at,qq=...]` / `<@!...>` 原样透传，正则从 `[` / `<` 起就匹配不上，整条指令不触发。
 _WAKE_WORD_POOL = ("wws", "水表", "战绩", "战舰世界", "战舰")
+_AT_PREFIX = r"(?:@\S+|\[CQ:at[^\]]*\]|<@!?[^>\s]*>)"
 WWW_PATTERN = (
-    r"^\s*(?:@\S+\s+)*[/!！／]?\s*(?P<word>"
+    r"^\s*(?:" + _AT_PREFIX + r"\s+)*[/!！／]?\s*(?P<word>"
     + "|".join(_WAKE_WORD_POOL)
     + r")(?:\s+(?P<rest>.*))?$"
 )
@@ -282,7 +289,8 @@ _EN_NOISE_RE = re.compile(
 
 # 时间词：先按数字剥（90天 / 两个月），再按固定说法剥
 _TIME_WORDS = (
-    "两个月", "三个月", "一个月", "这个月", "上个月", "本月", "这周", "本周", "上周",
+    "近一年", "十二个月", "六个月", "近半年", "半年", "一年",
+    "近两个月", "两个月", "三个月", "一个月", "这个月", "上个月", "本月", "这周", "本周", "上周",
     "一周", "这礼拜", "这几天", "三天", "今天", "今日", "昨天", "昨日", "当天", "近几天",
 )
 
@@ -290,6 +298,21 @@ _TIME_WORDS = (
 _AT_MARKUP_RE = re.compile(r"@<[^>]*>")
 # 兜底：纯文本的「@昵称」也要抹掉，否则会被当成船名的一部分
 _AT_MENTION_RE = re.compile(r"@[^\s@]+")
+# 原始 @ 码：OneBot 的 [CQ:at,qq=...] 与 <@123> / <@!123>。上游明确要求这类 token
+# 不能进 command_text（会被当普通参数，把 AID 挤到服务器位回「服务器名输入错误」）。
+_AT_CQ_RE = re.compile(r"\[CQ:at[^\]]*\]", re.IGNORECASE)
+_AT_ANGLE_RE = re.compile(r"<@!?[^>\s]*>")
+
+
+def _strip_at_tokens(text: str) -> str:
+    """抹掉文本里所有形式的 @ 提及，收口「@ 由接入端处理」这条约定。"""
+    if not text:
+        return ""
+    value = _AT_MARKUP_RE.sub(" ", text)
+    value = _AT_CQ_RE.sub(" ", value)
+    value = _AT_ANGLE_RE.sub(" ", value)
+    value = _AT_MENTION_RE.sub(" ", value)
+    return re.sub(r"\s+", " ", value).strip()
 
 # 配置里关键词一栏被清空时的兜底
 _DEFAULT_MENTION_KEYWORDS = ("水表", "战绩", "查一下", "查查", "查询")
@@ -306,7 +329,7 @@ _OTHER_PERSON_RE = re.compile(r"帮|给|替|他|她|群友|这位|那位|别人|
 
 def _is_bare_query(text: str) -> bool:
     """剥掉关键词与标点后什么都不剩：``@我 水表`` / ``查一下战绩`` 都是在查自己。"""
-    value = _AT_MENTION_RE.sub(" ", text or "")
+    value = _strip_at_tokens(text or "")
     for word in (*_MENTION_NOISE_WORDS, *_DEFAULT_MENTION_KEYWORDS):
         value = value.replace(word, " ")
     value = re.sub(r"[\s\W_]+", "", value, flags=re.UNICODE)
@@ -526,17 +549,14 @@ _BIND_USAGE = (
 
 
 def _clean_command_args(text: str) -> str:
-    """去掉参数里混进来的 @ 标记/昵称。
+    """去掉参数里混进来的 @ 标记/昵称/原始 @ 码。
 
     实测 ``@机器人 wws 特殊绑定 123456789 @某群友``：末尾 @ 群友只是
     为了提醒对方，却会当成参数交给 hikari，把 AID 挤到服务器位上，回一句
-    「服务器名输入错误」。@ 群友在指令参数里永远没有意义，直接剥掉。
+    「服务器名输入错误」。@ 群友在指令参数里永远没有意义，直接剥掉；
+    ``[CQ:at,qq=...]``、``<@!...>`` 这类原始 @ 码同理。
     """
-    if not text:
-        return ""
-    value = _AT_MARKUP_RE.sub(" ", text)
-    value = _AT_MENTION_RE.sub(" ", value)
-    return re.sub(r"\s+", " ", value).strip()
+    return _strip_at_tokens(text)
 
 
 def _parse_wake_aliases(raw: str) -> set[str]:
@@ -953,7 +973,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             return True
 
         text = str(message.get("processed_plain_text") or kwargs.get("text") or "")
-        cleaned = _AT_MENTION_RE.sub(" ", _AT_MARKUP_RE.sub(" ", text)).casefold()
+        cleaned = _strip_at_tokens(text).casefold()
         woke_by_at = self._message_is_at(message) or any(
             name.casefold() in cleaned for name in self._bot_names()
         )
@@ -961,7 +981,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             logger.info(f"[wows] 唤起方式要求 @ 机器人，已放行: {text[:60]!r}")
             return False
         if bool(getattr(cfg, "require_prefix", False)):
-            head = _AT_MARKUP_RE.sub(" ", text).lstrip()
+            head = _strip_at_tokens(text)
             has_prefix = head[:1] in ("/", "!", "！", "／")
             if not has_prefix and not woke_by_at:
                 logger.info(f"[wows] 唤起方式要求 / 前缀或 @ 机器人，已放行: {text[:60]!r}")
@@ -1005,7 +1025,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             now = time.monotonic()
             keys = self._at_state_keys(message)
             text = str(message.get("processed_plain_text") or "").strip()
-            is_query = bool(text) and bool(_QUERY_HINT_RE.search(_AT_MARKUP_RE.sub(" ", text)))
+            is_query = bool(text) and bool(_QUERY_HINT_RE.search(_strip_at_tokens(text)))
             if at:
                 self._learn_bot_name(message)
             for key in keys:
@@ -1198,7 +1218,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
                 return None
             kind, ship, days = self._mention_plan(message, target_name)
             # 这条消息被 abort 后不会进 mai_messages，原文只能靠这里留痕
-            trigger_text = _AT_MARKUP_RE.sub(" ", str(message.get("processed_plain_text") or ""))
+            trigger_text = _strip_at_tokens(str(message.get("processed_plain_text") or ""))
             trigger_text = re.sub(r"\s+", " ", trigger_text).strip()
             logger.info(
                 f"[wows] @ 查询触发: group={group_id} target={target_id} name={target_name!r} "
@@ -1272,7 +1292,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             return True
         if self._message_is_at(message):
             return True
-        clean = _AT_MENTION_RE.sub(" ", _AT_MARKUP_RE.sub(" ", text)).casefold()
+        clean = _strip_at_tokens(text).casefold()
         return any(name.casefold() in clean for name in self._bot_names())
 
     def _bot_names(self) -> set[str]:
@@ -1341,7 +1361,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         text = str(message.get("processed_plain_text") or "")
         if self._looks_like_command(text) or not self._mention_keyword_hit(text):
             return None
-        clean = _AT_MENTION_RE.sub(" ", _AT_MARKUP_RE.sub(" ", text))
+        clean = _strip_at_tokens(text)
         if _OTHER_PERSON_RE.search(clean):
             return None
         if not _SELF_QUERY_RE.search(clean):
@@ -1390,7 +1410,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         指令词池里的口语词（水表/战绩…）只有**在唤起配置里启用**时才算指令，
         否则「@某人 水表」会被误判成指令，把 @ 查询整条掐掉。
         """
-        stripped = _AT_MARKUP_RE.sub(" ", text).strip()
+        stripped = _strip_at_tokens(text)
         if not stripped:
             return False
         match = _WWW_RE.match(stripped)
@@ -1413,7 +1433,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         keywords = [k.strip() for k in re.split(r"[,，、\s]+", raw) if k.strip()]
         if not keywords:
             keywords = list(_DEFAULT_MENTION_KEYWORDS)
-        clean = _AT_MARKUP_RE.sub(" ", text)
+        clean = _strip_at_tokens(text)
         return any(word in clean for word in keywords)
 
     @staticmethod
@@ -1473,7 +1493,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         name = (name or "").strip()
         # 先把所有 @ 标记整段抹掉：@ 的不一定是被查的人（常见 @机器人 + @群友 混用），
         # 只按 target_name 替换会留下「机器人昵称 射水鱼」这种船名，上游必定找不到
-        text = _AT_MENTION_RE.sub(" ", text)
+        text = _strip_at_tokens(text)
         if not name:
             return text
         return text.replace(f"@{name}", " ").replace(name, " ")
@@ -1590,8 +1610,8 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         ▍为什么不再拿账号近期顶替单船
         以前「单船 60 天」空窗口会直接退回账号 60 天总表：图是总表、说明却写着
         「近期没开过」，用户看到的就是「明明没记录怎么还出水表」。
-        现在先把窗口放宽到 90 天（单船接口的空窗口多半是战绩落在窗口外），
-        90 天也没有才明确说「没有出战记录」，不发任何水表。
+        现在先把窗口放宽到一年（单船接口的空窗口多半是战绩落在窗口外），
+        一年也没有才明确说「没有出战记录」，不发任何水表。
         """
 
         async def raw_call(command_text: str):
@@ -2113,7 +2133,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             "查询玩家在指定战舰上的**历史累计**表现（生涯场次、胜率、伤害等）。"
             "用户问「我的俾斯麦打得怎么样」「XX 这条船战绩如何」时调用。"
             "⚠ 本工具没有时间维度，不能回答「最近/今天/这周/这一个月/两个月」："
-            "句子里只要出现时间范围或具体天数（今天、这周、30 天、两个月、90 天），"
+            "句子里只要出现时间范围或具体天数（今天、这周、30 天、两个月、一年），"
             "就必须改用 wws_ship_recent，否则会拿生涯数据冒充近期战绩。"
             "ship 必填，中英文船名均可（如 俾斯麦 / Bismarck），支持简写与别名"
             "（北卡 / 阿达尔 / 哈巴 / 彼得罗 / z52 都能落到原版船）。"
@@ -2165,7 +2185,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             "凡是带时间范围的账号级查询（今天 / 昨天 / 这周 / 这个月 / 两个月）都用本工具，"
             "不要用 wws_account —— 总表没有按天统计。"
             "days 必须按用户说法显式填（省掉只有 7 天）：今天=1、昨天=2、这周=7、"
-            "这一个月=30、两个月=60、三个月=90（最大 90）。"
+            "这一个月=30、两个月=60、三个月=90、半年=180、一年=360（最大 366）。"
             "如果用户同时点了具体船名（「两个月托尔水表」），改用 wws_ship_recent。"
             "battle_mode 只在用户明确指定模式时填写，可选：随机 / 单野 / 自行车 / 三轮车 / 排位；"
             "不填则返回全部模式，建议不填，由你根据数据自行判断该点评哪个。"
@@ -2206,7 +2226,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         detailed_description=(
             "只统计随机战 PVP。用户明确说「最近随机战」「随机打得怎么样」时调用。"
             "用户只是泛泛地说「最近战绩」时，应优先用 wws_recent。"
-            "days 为最近天数（默认 7，最大 90）。"
+            "days 为最近天数（默认 7，最大 366=一年）。"
         ),
         parameters=[_p_days(), _p_server(), _p_nickname()],
     )
@@ -2237,7 +2257,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         brief_description="整账号近期排位战；单船改用 wws_ship_recent",
         detailed_description=(
             "只统计排位战。用户说「最近排位」「排位打得怎么样」时调用。"
-            "days 为最近天数（默认 7，最大 90）。"
+            "days 为最近天数（默认 7，最大 366=一年）。"
         ),
         parameters=[_p_days(), _p_server(), _p_nickname()],
     )
@@ -2276,7 +2296,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             "「我最近开俾斯麦怎么样」「两个月托尔水表」「西西里 90 天战绩」「昨天这船打得如何」。"
             "不要用 wws_ship —— 那是生涯累计，没有时间维度。"
             "days 必须按用户说法显式填（省掉只有 7 天）：今天=1、昨天=2、这周=7、"
-            "这一个月=30、两个月=60、三个月=90（最大 90）。"
+            "这一个月=30、两个月=60、三个月=90、半年=180、一年=360（最大 366）。"
             "ship 必填；用户没提船名时应改用 wws_recent。"
             "船名支持简写与别名（北卡 / 阿达尔 / 哈巴 / 彼得罗 / z52 / 英文名），"
             "插件会自动落到原版船；换皮船要带换皮标记（克莱贝尔CLR、北卡CLR、AL信浓……），"
@@ -2313,7 +2333,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
                 days_used = None
         if not days_used:
             # 用户只说「拉蒂格水表」时模型也会挑这个工具；不带天数走 recent 会落到
-            # hikari 的默认窗口（实测只查到当天，再放宽到 90 天就变成「近期水表」），
+            # hikari 的默认窗口（实测只查到当天，再放宽到一年就变成「近期水表」），
             # 用户要的其实是生涯总表。这里直接改查生涯，并在内容里说明。
             logger.info(f"[wows] 单船 {ship!r} 没给时间范围，改为查生涯总表")
             payload = await self._run_tool(
@@ -2344,7 +2364,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             select_index=select_index,
         )
 
-        # 窗口内没战绩时先放宽到 90 天：用户问 60 天，船可能 61~90 天前开过，
+        # 窗口内没战绩时先放宽到一年：用户问 60 天，船可能 61~366 天前开过，
         # 直接回「无记录」就是拿窗口当结论，放宽后仍空才是真的没开过。
         # 注意 `_run_tool` 永远返回 success=True（业务失败也走 content），只能看内容判断。
         if (
