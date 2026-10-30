@@ -7,13 +7,31 @@ logging.root 上的 IPC handler，所以这里加一个 loguru sink 把记录转
 
 from __future__ import annotations
 
+import re
 import traceback
 
 from .log import logger
 
 _PREFIX = "[hikari-core]"
 
+# hikari-core 初始化时会打印完整配置，里面带明文 yuyuko token（形如 123456:AbCd...）
+_TOKEN_RE = re.compile(r"\b\d{5,12}:[A-Za-z0-9_-]{8,}\b")
+
 _installed = False
+
+
+def _mask(text: str) -> str:
+    return _TOKEN_RE.sub("***:***", text)
+
+
+def _mask_record(record) -> None:
+    """在 loguru 生成记录时脱敏，连它自带的 stderr 处理器也一并盖住。"""
+    try:
+        message = record.get("message")
+        if isinstance(message, str):
+            record["message"] = _mask(message)
+    except Exception:
+        pass
 
 
 def _sink(message) -> None:
@@ -25,7 +43,7 @@ def _sink(message) -> None:
             text += "\n" + "".join(
                 traceback.format_exception(exc.type, exc.value, exc.traceback)
             )
-        logger.log(record["level"].no, text)
+        logger.log(record["level"].no, _mask(text))
     except Exception:
         # 日志桥接自身绝不能影响业务
         pass
@@ -49,3 +67,5 @@ def install() -> None:
         diagnose=False,
         catch=True,
     )
+    # hikari-core 自己的 stderr 处理器不走我们的 sink，只能在这里统一打码
+    loguru_logger.configure(patcher=_mask_record)

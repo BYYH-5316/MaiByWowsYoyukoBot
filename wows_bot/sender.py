@@ -47,10 +47,12 @@ SERVER_LABELS = {"cn": "国服", "asia": "亚服", "eu": "欧服", "na": "美服
 
 
 def missing_token_hint() -> str:
-    """未配置 API Token 时回给用户的指引（获取方式统一指向 README）。"""
+    """未配置 API Token 时回给用户的指引：直接说填哪里、什么格式，不引用章节号。"""
     return (
         "还没有配置 yuyuko API Token，先填好才能查询哦~\n"
-        "获取与填写方式见插件 README 第 8.3 节"
+        "填在 WebUI →「插件」→「战舰世界战绩查询」→「战绩查询与渲染」→「API Token」，"
+        "格式是「QQ号:token」，原样粘贴、前后不要留空格。\n"
+        "还没有 token 的话，按插件 README 的「获取并填写 Token」一节申请。"
     )
 
 
@@ -70,3 +72,13 @@ def account_not_found_hint(hikari) -> str | None:
         f"3. 昵称里有空格就整体加括号：/wws bind {server} (ABC DEF)\n"
         f"4. 还是查不到就改用 AID 绑定：/wws 特殊绑定 <AID>"
     )
+
+
+def mention_header(
+    name: str, server: str, account: str, scope: str = "", self_query: bool = False
+) -> str:
+    """@ 查询成功发图前的说明：谁、哪个服、哪个号、（可选）查的是什么口径。"""
+    label = SERVER_LABELS.get(server, server) or server
+    window = f"（{scope}）" if scope else ""
+    who = "你自己的账号" if self_query else f"「{name}」绑定的账号"
+    return f"{who}：{label} {account}{window}，水表来啦~"

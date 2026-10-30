@@ -34,6 +34,7 @@ from .selection import SelectionManager  # noqa: E402,F401
 from .sender import (  # noqa: E402,F401
     OutputSender,
     account_not_found_hint,
+    mention_header,
     missing_token_hint,
     reply_text,
 )
