@@ -112,18 +112,47 @@ _TIME_WORD_DAYS = (
     (("今天", "今日", "当天"), 1),
 )
 
+# 中文数字也要认：「八个月」「十二天」以前只按阿拉伯数字剥，会被当成船名
+_CN_DIGITS = {
+    "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
+    "五": 5, "六": 6, "七": 7, "八": 8, "九": 9,
+}
+_CN_TIME_RE = re.compile(
+    r"(?:近|最近)?\s*(\d{1,3}|[一二两三四五六七八九十]{1,3})\s*个?\s*(月|天|周)"
+)
+
+
+def _cn_to_int(value: str) -> int | None:
+    """把「八」「十二」「二十」转成整数；认不出来返回 None。"""
+    if value.isdigit():
+        return int(value)
+    if not value:
+        return None
+    if "十" not in value:
+        return _CN_DIGITS.get(value) if len(value) == 1 else None
+    tens, _, ones = value.partition("十")
+    if len(tens) > 1 or len(ones) > 1:
+        return None
+    tens_value = _CN_DIGITS.get(tens, 1) if tens else 1
+    if tens and tens not in _CN_DIGITS:
+        return None
+    if ones and ones not in _CN_DIGITS:
+        return None
+    return tens_value * 10 + (_CN_DIGITS.get(ones, 0) if ones else 0)
+
 
 def _days_in_text(text: str) -> int | None:
     """从用户原话里抠天数；只是为了兜住模型漏填的 days，抠不出就返回 None。"""
     if not text:
         return None
     clean = _strip_at_tokens(text)
-    match = re.search(r"(\d{1,3})\s*(?:个)?\s*月", clean)
+    match = _CN_TIME_RE.search(clean)
     if match:
-        return _clamp_days(int(match.group(1)) * 30)
-    match = re.search(r"(\d{1,3})\s*天", clean)
-    if match:
-        return _clamp_days(int(match.group(1)))
+        number = _cn_to_int(match.group(1))
+        if number:
+            unit = match.group(2)
+            factor = 30 if unit == "月" else 7 if unit == "周" else 1
+            return _clamp_days(number * factor)
     for words, days in _TIME_WORD_DAYS:
         if any(word in clean for word in words):
             return days
@@ -141,9 +170,8 @@ def _ship_in_text(text: str) -> str:
     value = _strip_at_tokens(text)
     for word in _MENTION_NOISE_WORDS:
         value = value.replace(word, " ")
-    # 「近7天」「最近90天」一起剥，别留下孤零零的「近」
-    value = re.sub(r"近\s*\d{1,3}\s*(?:个)?\s*(?:月|天)", " ", value)
-    value = re.sub(r"\d{1,3}\s*(?:个)?\s*(?:月|天)", " ", value)
+    # 「近7天」「最近90天」「八个月」一起剥，别把时间词留在船名里
+    value = _CN_TIME_RE.sub(" ", value)
     for word in _TIME_WORDS:
         value = value.replace(word, " ")
     # 只剥明确的英文参数词（recent / single …）。不能整段删掉英文字母：
