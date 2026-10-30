@@ -181,24 +181,32 @@ def _ship_in_text(text: str) -> str:
     if not text:
         return ""
     value = _strip_at_tokens(text)
+    # 「近7天」「最近90天」「八个月」先整段剥。必须赶在 _RECENT_NUM_RE 前：
+    # 「最近90天」若先按裸数字剥掉「最近90」，剩下的「天」会粘到船名上（天4501）
+    value = _CN_TIME_RE.sub(" ", value)
+    # 「4501recent180」「4501近期95」整段剥，必须赶在剥「近期 / 最近」之前，
+    # 否则词没了只剩数字，船名就成了「4501 95」
+    value = _RECENT_NUM_RE.sub(" ", value)
     for word in _MENTION_NOISE_WORDS:
         value = value.replace(word, " ")
-    # 「近7天」「最近90天」「八个月」一起剥，别把时间词留在船名里
-    value = _CN_TIME_RE.sub(" ", value)
     for word in _TIME_WORDS:
         value = value.replace(word, " ")
     # 只剥明确的英文参数词（recent / single …）。不能整段删掉英文字母：
     # 「AL信浓」「ARP大和」「HSF哈巴」这些联动船的前缀本身就是船名的一部分。
     value = _EN_NOISE_RE.sub(" ", value)
     value = value.replace("的", " ")
-    # 「recent36」剥掉 recent 后剩一串数字，别让它混进船名；
-    # 但 U-190 / I-56 / S-189 里的数字是船名的一部分（前面连着字母或连字符），保留
-    value = re.sub(r"(?<![\w-])\d{1,4}(?![\w-])", " ", value)
+    # 「西西里recent36」剥完剩一串数字，别让它混进船名；
+    # 但只剩数字时不能剥：4501 就是 U-4501（上游按名称模糊匹配），
+    # 剥掉会让船名变成空、整条消息退化成查整账号。
+    # 带字母或连字符的数字（U-190 / I-56 / S-189 / u4501）本来就保留
+    if re.search(r"[^\d\s-]", value):
+        value = re.sub(r"(?<![\w-])\d{1,4}(?![\w-])", " ", value)
     value = re.sub(r"[^\w-]+", " ", value, flags=re.UNICODE)
     # 「AL 信浓」这种带空格的写法会被上游当成「服务器 昵称」参数，拼回去
     value = re.sub(r"(?<=[A-Za-z])\s+(?=[\u4e00-\u9fff])", "", value)
     value = re.sub(r"\s+", " ", value).strip(" -")
-    if not value or len(value) > 24 or value.isdigit():
+    # 纯数字只有 3 位以上才当船名（4501 → U-4501）；「36」这种更像天数，别当船
+    if not value or len(value) > 24 or (value.isdigit() and len(value) < 3):
         return ""
     return value
 
@@ -370,6 +378,9 @@ _EXTRA_QUERY_CUES = (
     re.compile(r"(?<![A-Za-z])recent(?![A-Za-z])", re.IGNORECASE),
     re.compile(r"近期\s*\d{1,3}"),
     re.compile(r"查\s*[我咱俺]"),
+    # 「近188天4501」：近/最近 带明确时间单位才算。只认 天/周/个月，
+    # 「最近30把西西里」是局数不是天数，别误触发
+    re.compile(r"(?:近|最近)\s*(?:\d{1,3}|[一二两三四五六七八九十]{1,3})\s*(?:天|周|个\s*月)"),
 )
 
 # 只有用户原话真的提到「绑定」才允许 wws_bind 落地：
