@@ -43,7 +43,8 @@ async def get_RecentsInfo(hikari: Hikari_Model) -> Hikari_Model:
         }
     print(params)
     client_yuyuko = await get_client_yuyuko(hikari.UserInfo)
-    resp = await client_yuyuko.get(url, params=params, timeout=20)
+    # 366 天窗口的响应可达 900KB，实测偶发超过 20s 被 ReadTimeout 打断
+    resp = await client_yuyuko.get(url, params=params, timeout=45)
     result = json.loads(resp.content)
     hikari.Output.Yuyuko_Code = result['code']
     if result['code'] == 200:

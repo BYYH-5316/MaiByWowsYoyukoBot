@@ -15,7 +15,7 @@
 | 插件图标 | `assets/icon.png`（经 manifest 的 `display.icon` 声明，显示在 WebUI 插件页） |
 | MaiBot 移植与维护 | 白云鱼海 |
 | 运行环境 | MaiBot 1.0.0–1.3.99（实测 1.3.15）+ 插件 SDK 2.6.0–2.16.99（实测 2.16.0） |
-| 内置渲染核心 | hikari-core `2.0.1`（随插件分发，不走 PyPI，含 3 处本地安全补丁） |
+| 内置渲染核心 | hikari-core `2.0.1`（随插件分发，不走 PyPI，含 4 处本地补丁） |
 | 数据源 | yuyuko API `https://v3-api.wows.shinoaki.com` |
 | 仓库 | https://github.com/BYYH-5316/MaiByWowsYoyukoBot |
 
@@ -532,7 +532,7 @@ WG 加新船、改数值都不需要人工干预；想立刻看到就 `/wws 更�
 
 ### 6.2 升级 hikari-core
 
-> ⚠️ 内置的 `hikari_core/` **不再是纯上游副本**，本移植版打了三处安全补丁（见下表）。
+> ⚠️ 内置的 `hikari_core/` **不再是纯上游副本**，本移植版打了四处本地补丁（见下表）。
 > 整目录覆盖会一并抹掉它们，升级后必须按表把补丁重新应用。
 
 | 文件 | 补丁 | 作用 |
@@ -540,6 +540,7 @@ WG 加新船、改数值都不需要人工干预；想立刻看到就 `/wws 更�
 | `hikari_core/features/system.py` | `check_version` 的自动同步 | 只在插件目录自身找 `.git`（不向上一级主程序目录查找），并把 origin 限定为本仓库 `byyh-5316/maibywowsyoyukobot`；origin 不符时直接拒绝（返回 -2），不执行任何 git 操作 |
 | `hikari_core/features/system.py` | `_unsafe_zip_member` | 解压前校验 zip 条目：绝对路径、盘符、`../` 上跳、符号链接一律拒绝，防 zip-slip |
 | `hikari_core/Html_Render/browser.py` | `playwright install-deps` | `os.system` 改为 `subprocess.run([...], check=False)`，不走 shell，失败不阻断内核安装 |
+| `hikari_core/features/account/recent.py`、`account/recents.py`、`ship/recent.py` | 近期查询超时 | `timeout=20` 改为 `45`：366 天窗口的响应可达约 900KB，实测偶发超过 20 秒被 `ReadTimeout` 打断（会退回账号近期，但拿不到单船数据） |
 
 1. 备份：`cp -r hikari_core hikari_core.bak`
 2. 从上游取新的 `hikari_core/` **整目录覆盖**，然后按上表重新打补丁（`wows_bot/` 适配层不受影响）
@@ -670,7 +671,7 @@ yuyuko 的昵称搜索是**精确匹配**，实测结果：
 完整声明（含数据与商标说明）见 [NOTICE.md](NOTICE.md)，许可证见 [LICENSE](LICENSE)。
 
 本仓库主要新增 MaiBot 适配层（`plugin.py`、`config.py`、`wows_bot/`、`yuyuko_llm/`）与部署文档；
-`hikari_core/` 只有三处安全补丁，清单见 [6.2](#62-升级-hikari-core)。
+`hikari_core/` 只有四处本地补丁，清单见 [6.2](#62-升级-hikari-core)。
 
 > 原版仓库目前未声明开源许可证，本移植版按 MIT 发布并保留原作者完整署名；
 > 如上游作者对分发方式有异议，请开 Issue 告知。

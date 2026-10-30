@@ -55,6 +55,10 @@
   「查下我/TA 最近一年战绩」现在真的查一年，超过 366 会夹到 366（yuyuko 的 recent
   接口本身就是「最大查询时间一年」）；`/wws 近期 400` 仍是直传上游、由上游报错。
   单船近期的空窗口放宽也同步改为一年
+- 近期查询的 HTTP 超时从 20 秒放宽到 **45 秒**：一年窗口的响应可达约 900KB，
+  实测有人查单船 360 天时在第 20 秒被 `ReadTimeout` 打断（虽然会退回账号近期出图，
+  但拿不到单船数据）。改动在 `hikari_core/features/{account/recent,account/recents,ship/recent}.py`，
+  已记入 README 6.2 的本地补丁表
 - 配置 schema 升到 `1.4.0`（新增「唤起方式」分组，分组顺序按 WebUI 展示排列）
 - README 重写（文档版本 1.2.0）：按 WebUI 分组顺序讲配置，补「使用方法」与「排障」
 - `mention_query.bot_names` 删除，机器人名字统一读宿主配置
