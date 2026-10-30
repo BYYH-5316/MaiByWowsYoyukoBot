@@ -31,6 +31,11 @@ if not (_PLUGIN_ROOT / "hikari_core" / "__init__.py").is_file():
 from .logging_bridge import install as install_logging_bridge  # noqa: E402
 from .runtime import CoreRuntime  # noqa: E402,F401
 from .selection import SelectionManager  # noqa: E402,F401
-from .sender import OutputSender, account_not_found_hint, reply_text  # noqa: E402,F401
+from .sender import (  # noqa: E402,F401
+    OutputSender,
+    account_not_found_hint,
+    missing_token_hint,
+    reply_text,
+)
 
 install_logging_bridge()

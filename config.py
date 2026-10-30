@@ -44,8 +44,8 @@ class WowsConfig(PluginConfigBase):
     __ui_order__: ClassVar[int] = 1
 
     wows_token: str = Field(
-        default="2622749113:TAN9iMARSDJbzLVOUK1a9cTSiKtb32GIbpr",
-        description="yuyuko api token（加群 967546463 申请）",
+        default="",
+        description="yuyuko API token，格式为「QQ号:token」，必须自己申请（README 8.3 节）；留空时除帮助外的指令都会被拦截并提示获取方式",
         json_schema_extra={"label": "API Token", "order": 0},
     )
     use_browser: Literal["chromium", "firefox"] = Field(

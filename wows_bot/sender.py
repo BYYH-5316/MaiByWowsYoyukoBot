@@ -11,6 +11,9 @@ import base64
 
 from .log import logger
 
+# GitHub 会把 README 的「### 8.3 获取 yuyuko API Token」渲染成这个锚点
+TOKEN_GUIDE_URL = "https://github.com/BYYH-5316/MaiByWowsYoyukoBot#83-获取-yuyuko-api-token"
+
 
 class OutputSender:
     """负责渲染结果的发送。"""
@@ -45,6 +48,17 @@ async def reply_text(ctx, stream_id: str, text: str) -> None:
 # yuyuko 的昵称搜索是**精确匹配**，查不到时上游只回「用户不存在」，
 # 用户完全看不出是自己填错了服务器还是打错了昵称，这里把实际使用的参数回显出来。
 SERVER_LABELS = {"cn": "国服", "asia": "亚服", "eu": "欧服", "na": "美服", "ru": "俄服"}
+
+
+def missing_token_hint() -> str:
+    """未配置 API Token 时回给用户的获取指引。"""
+    return (
+        "还没有配置 yuyuko API Token，先填好才能查询哦~\n"
+        "1. 加 QQ 群 967546463，按群公告提交申请\n"
+        "2. 通过后 token 会发到邮箱，格式为「QQ号:token」，原样复制\n"
+        "3. 打开 WebUI → 插件页 → 战舰世界战绩查询 → 配置，把 token 填到「API Token」并保存\n"
+        f"详细步骤见 README 第 8.3 节：{TOKEN_GUIDE_URL}"
+    )
 
 
 def account_not_found_hint(hikari) -> str | None:

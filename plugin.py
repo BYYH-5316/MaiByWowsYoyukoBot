@@ -25,12 +25,22 @@ from maibot_sdk import Command, MaiBotPlugin
 # 先导入 wows_bot：它的 __init__ 会把插件根目录挂进 sys.path，
 # 之后才能把随包分发的 hikari_core 当顶级包导入。
 from .config import WowsSettings
-from .wows_bot import CoreRuntime, OutputSender, SelectionManager, account_not_found_hint, reply_text
+from .wows_bot import (
+    CoreRuntime,
+    OutputSender,
+    SelectionManager,
+    account_not_found_hint,
+    missing_token_hint,
+    reply_text,
+)
 from .wows_bot.log import logger
 from hikari_core import callback_hikari, init_hikari
 
 # yuyuko API 的 platformType（与聊天平台无关，固定 QQ）
 PLATFORM = "QQ"
+
+# 不需要 token 就能用的指令：空参数（等同 help）与帮助本身
+_TOKEN_FREE_COMMANDS = {"", "help", "帮助"}
 
 # 允许「@机器人 /wws xxx」「/wws xxx」「wws xxx」三种写法
 WWW_PATTERN = r"^\s*(?:@\S+\s+)*[/!！／]?\s*wws(?:\s+(?P<rest>.*))?$"
@@ -61,6 +71,11 @@ class WowsYuyukoPlugin(MaiBotPlugin):
 
     async def on_load(self) -> None:
         """下发配置并启动 hikari-core。"""
+        if not self._token_configured():
+            logger.warning(
+                "[wows] 未配置 yuyuko API Token：除 /wws help 外的指令都会提示先配置；"
+                "获取方式见 README 8.3 节（QQ 群 967546463）"
+            )
         self._runtime = CoreRuntime(self.config, self.ctx.paths.data_dir)
         await self._runtime.start()
 
@@ -102,6 +117,11 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         logger.info(
             f"[wows] 指令 {rest!r} user={kwargs.get('user_id')} group={kwargs.get('group_id')}"
         )
+        if not self._token_configured() and not self._is_token_free(rest):
+            logger.warning("[wows] 未配置 wows_token，已拦截指令并提示获取方式")
+            await reply_text(self.ctx, stream_id, missing_token_hint())
+            return True, "", 2
+
         if not self.runtime.is_ready():
             # 首次启动要下模板/资源，这期间别让指令静默卡死
             await reply_text(self.ctx, stream_id, "正在准备渲染资源，请稍等一会儿再查询哦~")
@@ -194,6 +214,16 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         if isinstance(message, dict):
             return str(message.get("account_id") or "")
         return ""
+
+    def _token_configured(self) -> bool:
+        """是否已填写 yuyuko API Token（空串/纯空白视为未配置）。"""
+        return bool((self.config.wows.wows_token or "").strip())
+
+    @staticmethod
+    def _is_token_free(rest: str) -> bool:
+        """该指令是否无需 token（帮助页）。"""
+        parts = rest.split(maxsplit=1)
+        return (parts[0].lower() if parts else "") in _TOKEN_FREE_COMMANDS
 
 
 def create_plugin() -> MaiBotPlugin:

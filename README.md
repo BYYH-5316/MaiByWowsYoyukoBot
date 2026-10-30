@@ -8,7 +8,7 @@
 | 插件 ID | `community.wows-yuyuko` |
 | 插件名称（市场标题） | 战舰世界战绩查询 |
 | 插件类型 | `other`（其他） |
-| 插件版本 | 1.0.1 |
+| 插件版本 | 1.0.2 |
 | 插件图标 | `assets/icon.png`（经 manifest 的 `display.icon` 声明，显示在 WebUI 插件页） |
 | MaiBot 移植与维护 | 白云鱼海 |
 | 运行环境 | MaiBot 1.0.0–1.3.99（实测 1.3.15）+ 插件 SDK 2.6.0–2.16.99（实测 2.16.0） |
@@ -123,6 +123,8 @@ git clone https://github.com/BYYH-5316/MaiByWowsYoyukoBot
 2. 在插件配置里填入 `wows_token`（获取方式见第 8.3 节）；
 3. 保存。`[plugin] enabled = true` 由面板写入，无需手改 `config.toml`。
 
+> `wows_token` 是**必填项**，插件不自带任何 token。留空时机器人只会回复获取指引，除 `/wws help` 外的指令都不会发往上游。
+
 ### 4.3 重启载入
 
 - **Windows 一键包**：关闭程序窗口，用启动菜单重新启动麦麦（改代码 / 改 manifest 后必须重启，改配置不用）
@@ -167,10 +169,10 @@ cd <麦麦根目录>/plugins/MaiByWowsYoyukoBot
 git pull            # 或重新下载 ZIP 覆盖（别覆盖 config.toml / config_back/）
 ```
 
-然后按 4.3 重启。升级提示中的版本号来自 `_manifest.json` 的 `version`，本版本为 `1.0.1`。
+然后按 4.3 重启。升级提示中的版本号来自 `_manifest.json` 的 `version`，本版本为 `1.0.2`。
 
 若使用 WebUI 的插件市场安装 / 升级，本仓库的 Git Tag 必须与 `_manifest.json` 的 `version` 完全一致
-（例如 tag `1.0.1` 对应 `"version": "1.0.1"`），否则市场会报版本不匹配。
+（例如 tag `1.0.2` 对应 `"version": "1.0.2"`），否则市场会报版本不匹配。
 
 ## 6. 配置项
 
@@ -178,7 +180,7 @@ WebUI 里按表单填写即可，落盘为 `config.toml` 的 `[wows]` 节：
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `wows_token` | 公开测试 token | yuyuko API token，正式使用请换成自己的 |
+| `wows_token` | 空（必填） | yuyuko API token，格式「QQ号:token」；**留空时除 `/wws help` 外的指令都会被拦截并提示获取方式**（见 8.3） |
 | `use_browser` | `chromium` | 截图内核，`chromium` / `firefox`；chromium 性能约为 firefox 三倍 |
 | `image_type` | `jpeg` | `jpeg` / `png` / `webp`；png/webp 体积更小但稍慢 |
 | `user_image_cache_ttl_minutes` | `10080` | 头像/横幅本地缓存分钟数，`<=0` 永不过期 |
@@ -272,11 +274,13 @@ WG 加新船、改数值都不需要人工干预；想立刻看到就 `/wws 更�
 
 ### 8.3 获取 yuyuko API Token
 
+**必填项**：插件不自带任何 token。未填写时，除 `/wws help` 外的指令都会被拦截并回复获取指引，不会向 yuyuko 发请求。
+
 1. 加 QQ 群 **967546463**，按群公告提交申请（yuyuko / Hikari 生态统一渠道）；
-2. 通过后 token **通过邮件下发**，格式固定为 `<申请时使用的QQ号>:<邮件里的token>`；
+2. 通过后 token **通过邮件下发**，格式固定为 `<申请时使用的QQ号>:<邮件里的token>`，**原样粘贴**，冒号不能省、前后不要留空格；
 3. 网页端 `https://wows.shinoaki.com` 只提供战绩查询（查自己的 AID、复制特殊绑定指令），**没有 token 申请入口**；
-4. `config.py` 里内置的是**公开测试 token**，只够跑通流程，随时可能被限流，正式使用请换成自己申请的；
-5. 失效表现：所有指令都回上游短错误，日志里 `POST https://v3-api.wows.shinoaki.com/...` 之后紧跟 `failed`。
+4. 填写位置：WebUI → 插件页 → 战舰世界战绩查询 → 配置 → 「API Token」，保存即热更新，不用重启；
+5. 填错 / 失效的表现：`/wws 近期` 会回上游原文 `请求头不符合标准;uri=/api/wows/recent/day/info`，日志里出现 `{'code': 409, ...}`；被限流或封禁时会回鉴权/频率类短错误。token 没有自助续期，重新申请即可。
 
 ### 8.4 备份清单
 
@@ -334,6 +338,16 @@ yuyuko 的昵称搜索是**精确匹配**，实测结果：
 | WebUI 插件详情读不出 README | 插件根目录缺 `README.md`（读不到才去 GitHub Raw 拉上游 README） | 确保 `plugins/MaiByWowsYoyukoBot/README.md` 存在（就是本文件） |
 | 改完代码没生效 | 需要重启 | Windows 重启麦麦；Docker `docker restart maim-bot-core` |
 | 插件列表里版本号还是旧的 | `_manifest.json` 没更新或未重启 | 改 `version` 后重启，必要时在插件页点「刷新」 |
+| 回复「还没有配置 yuyuko API Token…」 | `wows_token` 为空（新装默认空） | 按 8.3 申请并填入 WebUI「API Token」，保存即生效，不用重启 |
+| `/wws 近期` 回 `请求头不符合标准;uri=/api/wows/recent/day/info` | token 为空、格式不对（漏了 `QQ号:` 前缀）或前后带空格 | 必须是 `QQ号:token` 原样粘贴；改完保存再试 |
+| 日志出现 `{'code': 409, ...}` 但水表能出图 | 上报数据接口要 token，空 token 时静默跳过 | 填好 token 后自动消失，不影响查询 |
+| token 被限流 / 回鉴权类短错误 | 共用公开 token 或请求过频 | 用自己申请的 token；失效就重新申请，没有自助续期 |
+| `/wws 检查更新` 永远说「已是最新」 | 上游 `version.json` 只登记到 1.x，且是字符串比较（已知问题） | 别信它；有没有新版看仓库 Releases |
+| 重启后管理员校验串变了 | 每次启动重新生成；已有 `admin.txt` 时不再生成 | 用最新日志里那条 32 位串私信机器人 |
+| WebUI 插件页没有图标 | manifest 缺 `display.icon`，或 `assets/icon.png` 丢失 | 确认 `_manifest.json` 里 `display.icon.value` 指向的文件存在，然后刷新页面 |
+| 群里发指令没反应 | 插件未启用、群聊没 @ 机器人 / 没带 `/wws` 前缀，或还在准备资源 | 看日志有没有 `[wows] 指令 ...`；先确认 WebUI 已启用 |
+| Windows 启动时报 Playwright 下载失败 | 官方 CDN 不通 | 设 `PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright/`，或按 7.2 预置内核 |
+| 换机器 / 重装后要重新下载约 400 MB | 数据目录没有迁移 | 迁移 `MaiMBot-plugin-data/community.wows-yuyuko`（见 8.4） |
 
 ## 11. 卸载
 
