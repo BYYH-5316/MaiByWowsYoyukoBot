@@ -11,10 +11,6 @@ import base64
 
 from .log import logger
 
-# GitHub 会把 README 的「### 8.3 获取 yuyuko API Token」渲染成这个锚点
-TOKEN_GUIDE_URL = "https://github.com/BYYH-5316/MaiByWowsYoyukoBot#83-获取-yuyuko-api-token"
-
-
 class OutputSender:
     """负责渲染结果的发送。"""
 
@@ -54,7 +50,7 @@ def missing_token_hint() -> str:
     """未配置 API Token 时回给用户的指引（获取方式统一指向 README）。"""
     return (
         "还没有配置 yuyuko API Token，先填好才能查询哦~\n"
-        f"获取与填写方式见插件 README 第 8.3 节：{TOKEN_GUIDE_URL}"
+        "获取与填写方式见插件 README 第 8.3 节"
     )
 
 
