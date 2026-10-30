@@ -84,7 +84,7 @@ class BattleStatsExtractor:
     }
 
     # 「服务器数据」：PR 分项里相对**服务器基线**的口径（details.two / three）。
-    # ▍注意别取 originalServer：那里面是累计值（damage 是总额、wins 是总场次），
+    # ▍注意别取 originalServer：那里面是累计值（damage 7 亿、wins 5036 场），
     # 是原始服务器总盘子，不是场均/胜率；two 才是「服务器数据」那组分项。
     SERVER_FIELDS: dict[str, tuple[str, ...]] = {
         "server_avg_damage": ("details", "two", "damage"),

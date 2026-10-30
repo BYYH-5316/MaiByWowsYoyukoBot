@@ -13,7 +13,7 @@ _initial_scheduler = True
 class Config_Model(BaseModel):
     proxy: Optional[str] = None
     http2: bool = True
-    token: Optional[str] = ''  # 上游内置的公开默认 token 已移除，由接入端注入
+    token: Optional[str] = '123456:111111111111'
     Authorization: Optional[str] = None  # 自定义 Authorization（如 data_user 私有接口鉴权），为空时回退用 token
     auto_rendering: bool = True
     auto_image: bool = True
@@ -49,8 +49,7 @@ hikari_config = Config_Model()
 def set_hikari_config(  # noqa: PLR0913
     proxy: Optional[str] = None,
     http2: bool = True,
-    # 上游内置的公开默认 token 已移除，由接入端注入
-    token: Optional[str] = '',
+    token: Optional[str] = '123456:111111111111',
     auto_rendering: bool = True,
     auto_image: bool = True,
     use_broswer: Optional[str] = 'chromium',
