@@ -419,11 +419,23 @@ def _ship_missing(hikari: Any) -> bool:
 
 
 def _ship_missing_text(ship: str, hikari: Any) -> str:
-    """把「找不到船 / 该战舰数据不存在」翻成用户能判读的一句话。"""
+    """把「找不到船 / 该战舰数据不存在」翻成用户能判读的一句话。
+
+    ▍为什么两句都要带「换默认账号」
+    实测最常见的成因不是船名写错，而是默认账号被换成了没有这艘船的号：
+    同一条船，旧默认账号 success、新默认账号「该战舰数据不存在」。
+    只回「船名可能写错了」，用户会一直换写法，永远查不出来。
+    """
     data = str(getattr(getattr(hikari, "Output", None), "Data", "") or "")
     if "找不到船" in data:
-        return f"没找到「{ship}」这艘船，船名可能写错了；换完整船名或英文名再试试~"
-    return f"「{ship}」没有战绩数据：TA 可能没买过、没开过这艘船，或上游还没有这艘船的数据~"
+        return (
+            f"没找到「{ship}」这艘船：可能船名写错了，也可能这艘船不在当前默认账号名下。"
+            "换完整船名 / 英文名再试；绑了多个号的话发【/wws 切换绑定】换默认账号再查~"
+        )
+    return (
+        f"「{ship}」没有战绩数据：当前默认账号可能没买过、没开过这艘船，或上游还没有这船的数据。"
+        "绑了多个号的话发【/wws 切换绑定】换默认账号再查~"
+    )
 
 
 def _observed_identity(hikari: Any) -> tuple[str, str]:
