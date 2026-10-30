@@ -22,7 +22,7 @@
     "min_version": "2.6.0",
     "max_version": "2.16.99"
   },
-  "plugin_type": "other",
+  "plugin_type": "game",
   "display": {
     "icon": { "type": "local", "value": "assets/icon.png" }
   },
@@ -35,7 +35,7 @@
     { "type": "python_package", "name": "pillow", "version_spec": ">=10.0.0" },
     { "type": "python_package", "name": "playwright", "version_spec": "==1.58.0" }
   ],
-  "capabilities": ["send.text", "send.image", "config.get"],
+  "capabilities": ["send.text", "send.image"],
   "changelog": "CHANGELOG.md",
   "i18n": {
     "default_locale": "zh-CN",

@@ -9,6 +9,9 @@
 @GitHub         : https://github.com/yanyongyu
 """
 __author__ = 'yanyongyu'
+import os
+import subprocess
+import sys
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 
@@ -87,7 +90,8 @@ async def install_browser(use_browser):
         sys.argv = ['', 'install', 'chromium']
     try:
         logger.info('正在安装依赖')
-        os.system('playwright install-deps')
+        # 固定命令、列表参数（不走 shell）；Linux 下需要 root，失败也不阻断后面的内核安装
+        subprocess.run(['playwright', 'install-deps'], check=False)
         main()
     except SystemExit as e:
         if e.code == 0:

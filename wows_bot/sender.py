@@ -51,13 +51,10 @@ SERVER_LABELS = {"cn": "国服", "asia": "亚服", "eu": "欧服", "na": "美服
 
 
 def missing_token_hint() -> str:
-    """未配置 API Token 时回给用户的获取指引。"""
+    """未配置 API Token 时回给用户的指引（获取方式统一指向 README）。"""
     return (
         "还没有配置 yuyuko API Token，先填好才能查询哦~\n"
-        "1. 加 QQ 群 967546463，按群公告提交申请\n"
-        "2. 通过后 token 会发到邮箱，格式为「QQ号:token」，原样复制\n"
-        "3. 打开 WebUI → 插件页 → 战舰世界战绩查询 → 配置，把 token 填到「API Token」并保存\n"
-        f"详细步骤见 README 第 8.3 节：{TOKEN_GUIDE_URL}"
+        f"获取与填写方式见插件 README 第 8.3 节：{TOKEN_GUIDE_URL}"
     )
 
 

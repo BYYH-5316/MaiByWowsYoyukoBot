@@ -34,18 +34,61 @@ async def get_help(hikari: Hikari_Model):
     return hikari.success({})
 
 
+# 允许自动同步的仓库（owner/repo，小写）。只认插件自己的仓库，
+# 防止在 ZIP 部署 / 主程序是 git 仓库时把别的仓库拉下来。
+_ALLOWED_REMOTE_REPOS = frozenset({'byyh-5316/maibywowsyoyukobot'})
+
+
+def _plugin_root() -> Path:
+    """插件根目录（hikari_core 的上一级，含 _manifest.json）。"""
+    return Path(__file__).resolve().parent.parent.parent
+
+
 def _find_repo_root() -> Optional[Path]:
-    """向上查找包含 .git 的仓库根目录（供 check_version 同步用）"""
-    start = Path(__file__).resolve().parent.parent.parent  # hikari_core 的上级
-    for d in (start, *start.parents):
-        if (d / '.git').exists():
-            return d
-    return None
+    """只认插件根目录自身的 .git，绝不向上一级（主程序目录）查找。"""
+    root = _plugin_root()
+    return root if (root / '.git').exists() else None
+
+
+def _remote_slug(remote_url: str) -> str:
+    """把 https / ssh 形式的 remote 统一成 owner/repo（小写）。"""
+    url = (remote_url or '').strip().rstrip('/')
+    if url.endswith('.git'):
+        url = url[:-4]
+    for prefix in (
+        'git@github.com:',
+        'ssh://git@github.com/',
+        'https://github.com/',
+        'http://github.com/',
+    ):
+        if url.lower().startswith(prefix):
+            return url[len(prefix):].lower()
+    return ''
+
+
+def _git_origin_url(repo_root: Path) -> str:
+    """读取 origin 地址，失败返回空串。"""
+    try:
+        proc = subprocess.run(
+            ['git', '-C', str(repo_root), 'remote', 'get-url', 'origin'],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except Exception:
+        return ''
+    return proc.stdout.strip() if proc.returncode == 0 else ''
 
 
 def _git_pull_main(repo_root: Path):
-    """同步仓库 main 分支，返回 (returncode, stdout, stderr)"""
+    """同步仓库 main 分支，返回 (returncode, stdout, stderr)。
+
+    只允许 origin 指向本插件仓库；不满足时返回 -2，不执行任何 git 操作。
+    """
     try:
+        origin = _git_origin_url(repo_root)
+        if _remote_slug(origin) not in _ALLOWED_REMOTE_REPOS:
+            return -2, '', f'origin 不是本插件仓库（{origin or "未配置"}），已拒绝自动同步'
         proc = subprocess.run(
             ['git', '-C', str(repo_root), 'pull', 'origin', 'main'],
             capture_output=True,
@@ -78,12 +121,14 @@ async def check_version(hikari: Hikari_Model):
     msg += '\n检测到新版本，正在同步仓库 main 分支...'
     repo_root = _find_repo_root()
     if repo_root is None:
-        msg += '\n未找到仓库目录（.git），请手动执行 git pull origin main'
+        msg += '\n当前安装目录不是 git 仓库（只在插件目录内查找 .git），请手动更新：git pull 或下载新版本覆盖'
         return hikari.error(msg)
     code, out, err = await asyncio.to_thread(_git_pull_main, repo_root)
     if code == 0:
         msg += f'\n同步完成：{repo_root}\n请重启 Bot 后生效'
         return hikari.success(msg)
+    if code == -2:
+        return hikari.error(f'{msg}\n{err}\n请手动更新：git pull 或下载新版本覆盖')
     msg += f'\n同步失败（exit {code}）:\n{(err or out)[-500:]}'
     return hikari.error(msg)
 
@@ -315,6 +360,21 @@ def _download_file(url: str, file_path: Path) -> bool:
         return False
 
 
+def _unsafe_zip_member(zip_ref: zipfile.ZipFile, base_path: Path) -> Optional[str]:
+    """返回第一个越界条目名（绝对路径 / 盘符 / ../ 上跳 / 符号链接），安全时返回 None。"""
+    base = base_path.resolve()
+    for member in zip_ref.infolist():
+        name = member.filename.replace('\\', '/')
+        if name.startswith('/') or (len(name) > 1 and name[1] == ':'):
+            return member.filename
+        target = (base / name).resolve()
+        if target != base and base not in target.parents:
+            return member.filename
+        if (member.external_attr >> 16) & 0o170000 == 0o120000:
+            return member.filename
+    return None
+
+
 def extract_zip(zip_path: Path, base_path: Path) -> bool:
     """
     解压ZIP文件
@@ -334,6 +394,11 @@ def extract_zip(zip_path: Path, base_path: Path) -> bool:
             # 获取文件列表
             file_list = zip_ref.namelist()
             logger.info(f"开始解压 {len(file_list)} 个文件")
+
+            unsafe = _unsafe_zip_member(zip_ref, base_path)
+            if unsafe:
+                logger.error(f"压缩包含越界条目，已拒绝解压: {unsafe}")
+                return False
 
             # 解压所有文件
             zip_ref.extractall(base_path)

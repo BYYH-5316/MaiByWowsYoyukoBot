@@ -3,9 +3,14 @@
 ## 1.0.2
 
 - 不再内置任何第三方 API Token：`wows_token` 默认空，由使用者自行申请
-- 未配置 token 时拦截指令并回复获取渠道（QQ 群 967546463）、填写位置与 README 指引，不再把上游的 `请求头不符合标准` 抛给用户；`/wws help` 仍可用
+- 未配置 token 时拦截指令并回复「先看 README 第 8.3 节」的指引（不再把上游的 `请求头不符合标准` 抛给用户，也不在对话里展开申请渠道）；`/wws help` 仍可用
 - 启动日志在 token 为空时给出一条明确告警，便于排障
-- README 排障表补全：空 token、token 格式错误、409 上报失败、限流/封禁、图标缺失、`/wws 检查更新` 不可信、管理员校验串、Playwright 下载失败、数据目录迁移
+- `/wws 检查更新` 的自动同步收窄到插件目录：只在插件根目录自身查找 `.git`（不再向上一级主程序目录上溯），并要求 `origin` 指向本插件仓库，否则拒绝执行任何 git 操作并提示手动更新
+- 模板 / 战舰 zip 解压前校验成员路径：绝对路径、盘符、`../` 上跳与符号链接一律拒绝，防 zip-slip
+- `hikari_core/Html_Render/browser.py` 的 `playwright install-deps` 由 `os.system` 改为列表参数的 `subprocess.run`，不走 shell
+- `_manifest.json`：`plugin_type` 改为 `game`，`capabilities` 去掉多余的 `config.get`
+- README 排障表补全：空 token、token 格式错误、409 上报失败、限流/封禁、图标缺失、`/wws 检查更新` 不可信、自动同步被拒绝、zip 越界条目、管理员校验串、Playwright 下载失败、数据目录迁移
+- README / NOTICE 新增运行期第三方域名清单；补上 `hikari_core/` 本地补丁表与升级时的重打步骤
 
 ## 1.0.1
 

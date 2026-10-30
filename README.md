@@ -7,7 +7,7 @@
 |---|---|
 | 插件 ID | `community.wows-yuyuko` |
 | 插件名称（市场标题） | 战舰世界战绩查询 |
-| 插件类型 | `other`（其他） |
+| 插件类型 | `game`（游戏） |
 | 插件版本 | 1.0.2 |
 | 插件图标 | `assets/icon.png`（经 manifest 的 `display.icon` 声明，显示在 WebUI 插件页） |
 | MaiBot 移植与维护 | 白云鱼海 |
@@ -28,7 +28,8 @@
 | 渲染模板与静态资源 | hikari-resource | 插件启动时自动拉取 |
 
 完整声明（含数据与商标说明）见 [NOTICE.md](NOTICE.md)，许可证见 [LICENSE](LICENSE)。
-本仓库只新增 MaiBot 适配层（`plugin.py`、`config.py`、`wows_bot/`）与部署文档，**未修改 `hikari_core/`**。
+本仓库主要新增 MaiBot 适配层（`plugin.py`、`config.py`、`wows_bot/`）与部署文档；
+`hikari_core/` 只有两处安全补丁，清单见 [8.2](#82-升级-hikari-core)。
 
 > 原版仓库目前未声明开源许可证，本移植版按 MIT 发布并保留原作者完整署名；
 > 如上游作者对分发方式有异议，请开 Issue 告知。
@@ -262,10 +263,19 @@ WG 加新船、改数值都不需要人工干预；想立刻看到就 `/wws 更�
 
 ### 8.2 升级 hikari-core
 
+> ⚠️ 内置的 `hikari_core/` **不再是纯上游副本**，本移植版打了两处安全补丁（见下表）。
+> 整目录覆盖会一并抹掉它们，升级后必须按表把补丁重新应用。
+
+| 文件 | 补丁 | 作用 |
+|---|---|---|
+| `hikari_core/features/system.py` | `check_version` 的自动同步 | 只在插件目录自身找 `.git`（不向上一级主程序目录查找），并把 origin 限定为本仓库 `byyh-5316/maibywowsyoyukobot`；origin 不符时直接拒绝（返回 -2），不执行任何 git 操作 |
+| `hikari_core/features/system.py` | `_unsafe_zip_member` | 解压前校验 zip 条目：绝对路径、盘符、`../` 上跳、符号链接一律拒绝，防 zip-slip |
+| `hikari_core/Html_Render/browser.py` | `playwright install-deps` | `os.system` 改为 `subprocess.run([...], check=False)`，不走 shell，失败不阻断内核安装 |
+
 1. 备份：`cp -r hikari_core hikari_core.bak`
-2. 从上游取新的 `hikari_core/` **整目录覆盖**（本项目的补丁都在 `wows_bot/` 适配层，不含 `hikari_core/` 内改动）
+2. 从上游取新的 `hikari_core/` **整目录覆盖**，然后按上表重新打补丁（`wows_bot/` 适配层不受影响）
 3. 重启麦麦；看日志「失败=0」，确认模板 / 战舰资源更新无报错
-4. 冒烟：`/wws help`、`/wws clan cn ABCD`
+4. 冒烟：`/wws help`、`/wws clan cn ABCD`、`/wws 检查更新`（应不再触发越界同步）
 5. 异常就回滚备份目录再重启
 
 > ⚠️ **别信 `/wws 检查更新`**：它拉的上游 `version.json` 只登记到 `1.1.3`（2025-03-10），v2 线没登记，
@@ -274,7 +284,7 @@ WG 加新船、改数值都不需要人工干预；想立刻看到就 `/wws 更�
 
 ### 8.3 获取 yuyuko API Token
 
-**必填项**：插件不自带任何 token。未填写时，除 `/wws help` 外的指令都会被拦截并回复获取指引，不会向 yuyuko 发请求。
+**必填项**：插件不自带任何 token。未填写时，除 `/wws help` 外的指令都会被拦截，只回复一句「先看 README 第 8.3 节」，不会向 yuyuko 发请求。
 
 1. 加 QQ 群 **967546463**，按群公告提交申请（yuyuko / Hikari 生态统一渠道）；
 2. 通过后 token **通过邮件下发**，格式固定为 `<申请时使用的QQ号>:<邮件里的token>`，**原样粘贴**，冒号不能省、前后不要留空格；
@@ -287,6 +297,21 @@ WG 加新船、改数值都不需要人工干预；想立刻看到就 `/wws 更�
 - 插件源码目录（**含填过 token 的 `config.toml`，备份等于备份凭据**）
 - 数据目录里的 `browsers/`（重装最费时）、`ship_cache*`、`admin.txt`
 - 截图产物 `file_img_temp/`、`browser_temp/` 可随手删
+
+### 8.5 第三方域名清单
+
+插件运行期会主动访问下列域名，全部为明文 HTTPS，不含任何遥测 / 统计：
+
+| 域名 | 用途 | 触发时机 |
+|---|---|---|
+| `v3-api.wows.shinoaki.com` | yuyuko 战绩 API、头像 / 公会 / 排行图片、`nahida-static` 战舰资源（`ship_cache.zip`、`ship_cache_hash.json`） | 每次查询；每周四的资源更新 |
+| `hikari-resource.oss-cn-shanghai.aliyuncs.com` | 模板清单 `template-v2.json` 与渲染模板文件 | 启动时、每天 04:00 / 12:00 |
+| `benx1n.oss-cn-beijing.aliyuncs.com` | hikari 的 `version.json`，供 `/wws 检查更新` 比对版本 | 管理员手动执行该指令时 |
+| `npmmirror.com` | Playwright 浏览器内核的国内下载镜像（`PLAYWRIGHT_DOWNLOAD_HOST`） | 首次安装 / 重建浏览器内核时 |
+| `github.com` | 仅 `/wws 检查更新` 判定有新版本且安装目录是 git 仓库时，对 `origin` 执行 `git pull`（只允许本插件仓库，见 8.2） | 管理员手动执行该指令时 |
+| `wows.mgaia.top` | **不发起请求**，只是 `/wws 特殊绑定` 提示用户去网页版复制的文案里的地址 | — |
+
+如需在内网 / 代理环境部署，把前四个加入白名单即可正常查询；后两个只影响「检查更新」。
 
 ## 9. 指令速查
 
@@ -348,6 +373,9 @@ yuyuko 的昵称搜索是**精确匹配**，实测结果：
 | 群里发指令没反应 | 插件未启用、群聊没 @ 机器人 / 没带 `/wws` 前缀，或还在准备资源 | 看日志有没有 `[wows] 指令 ...`；先确认 WebUI 已启用 |
 | Windows 启动时报 Playwright 下载失败 | 官方 CDN 不通 | 设 `PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright/`，或按 7.2 预置内核 |
 | 换机器 / 重装后要重新下载约 400 MB | 数据目录没有迁移 | 迁移 `MaiMBot-plugin-data/community.wows-yuyuko`（见 8.4） |
+| `/wws 检查更新` 回「当前安装目录不是 git 仓库…」 | ZIP 安装，或插件目录没有 `.git`（插件只在自身目录内查找，不向主程序目录上溯） | 正常行为；按第 5 节手动 `git pull` 或覆盖安装 |
+| `/wws 检查更新` 回「origin 不是本插件仓库，已拒绝自动同步」 | 插件目录的 `.git` 指向了别的仓库（常见于整个主程序是一个 git 仓库） | 正常行为，不会执行任何 git 操作；确认 `git -C plugins/MaiByWowsYoyukoBot remote get-url origin` 是本插件地址，否则手动更新 |
+| 日志「压缩包含越界条目，已拒绝解压」 | 下载到的模板 / 战舰 zip 里有绝对路径、`../` 或符号链接 | 已拦截，不会写到数据目录外；删掉数据目录里对应的 zip 与解压目录后重试，反复出现就报 Issue |
 
 ## 11. 卸载
 

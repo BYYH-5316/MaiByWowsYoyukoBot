@@ -1,8 +1,9 @@
 # 来源与致谢（NOTICE）
 
 本插件是 **AstrBot 插件在 MaiBot 上的移植版**，随插件分发的渲染核心与数据均来自下列上游项目。
-各上游代码、模板、图片与数据的版权归其各自作者所有；本仓库只新增 MaiBot 适配层（`plugin.py`、
-`config.py`、`wows_bot/`）与部署文档。
+各上游代码、模板、图片与数据的版权归其各自作者所有；本仓库主要新增 MaiBot 适配层
+（`plugin.py`、`config.py`、`wows_bot/`）与部署文档，`hikari_core/` 仅含 README 8.2 节列出的
+两处本地安全补丁（自动同步范围限制、zip 条目校验、`playwright install-deps` 调用方式）。
 
 ## 上游项目
 
@@ -16,6 +17,20 @@
 
 > 说明：原版仓库 `AstrByWowsYuyukoBot` 目前未声明开源许可证；本移植版按 MIT 发布，
 > 并保留原作者的完整署名。如上游作者对分发方式有异议，请开 Issue 告知，我们会及时调整。
+
+## 运行期访问的第三方域名
+
+插件不包含遥测，也不向上述作者以外的任何服务上报数据。运行期只访问：
+
+| 域名 | 用途 |
+|---|---|
+| `v3-api.wows.shinoaki.com` | 战绩 API 与 `nahida-static` 战舰资源、头像 / 公会 / 排行图片 |
+| `hikari-resource.oss-cn-shanghai.aliyuncs.com` | 模板清单与渲染模板 |
+| `benx1n.oss-cn-beijing.aliyuncs.com` | `/wws 检查更新` 用的 `version.json` |
+| `npmmirror.com` | Playwright 浏览器内核下载镜像（仅安装内核时） |
+| `github.com` | 仅 `/wws 检查更新` 判定有新版本且插件目录是 git 仓库时对 `origin` 执行 `git pull`，且只允许本插件仓库 |
+
+`wows.mgaia.top` 只出现在提示文案里，不会发起请求。
 
 ## 数据与商标
 

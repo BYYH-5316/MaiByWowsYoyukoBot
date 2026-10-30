@@ -74,7 +74,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         if not self._token_configured():
             logger.warning(
                 "[wows] 未配置 yuyuko API Token：除 /wws help 外的指令都会提示先配置；"
-                "获取方式见 README 8.3 节（QQ 群 967546463）"
+                "获取方式见 README 8.3 节"
             )
         self._runtime = CoreRuntime(self.config, self.ctx.paths.data_dir)
         await self._runtime.start()
