@@ -78,6 +78,8 @@ class CoreRuntime:
         from hikari_core import set_hikari_config
 
         set_hikari_config(**build_hikari_config(self._settings, self._data_dir))
+        # 配置热更新会重新导入插件模块，hikari 的模块级缓存目录可能已退回 cwd 兜底
+        _ensure_cache_dir(self._data_dir)
         # set_hikari_config 内部已 initial_cache_file()，此时缓存目录才是配置后的那个
         get_temp_dir().mkdir(parents=True, exist_ok=True)
         _prepare_browser()
@@ -130,6 +132,21 @@ def _ensure_ship_assets(cache_dir: Path) -> None:
                 return
             time.sleep(2)
         logger.warning("[wows] 战舰资源清单下载失败，初始化可能失败")
+
+
+def _ensure_cache_dir(data_dir: Path) -> None:
+    """把 hikari 的缓存目录钉回插件数据目录。
+
+    配置热更新时插件模块被重新导入，`hikari_core.core.cache_utils` 的模块级
+    `_project_base_dir` 会跟着重置；若不纠正，`setup_playwright` 会退回
+    `cwd/data/wows-yuyuko` 并尝试重新下载浏览器内核。
+    """
+    from hikari_core.core import cache_utils
+
+    base = cache_utils._project_base_dir
+    if base is None or Path(base).resolve() != Path(data_dir).resolve():
+        logger.warning(f"[wows] hikari 缓存目录异常（{base}），改回插件数据目录 {data_dir}")
+        cache_utils.initial_cache_file(Path(data_dir))
 
 
 def get_cache_dir() -> Path:
