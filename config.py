@@ -12,7 +12,7 @@ from typing import ClassVar, Literal
 
 from maibot_sdk import Field, PluginConfigBase
 
-CONFIG_SCHEMA_VERSION = "1.4.0"
+CONFIG_SCHEMA_VERSION = "1.5.0"
 
 
 class PluginSection(PluginConfigBase):
@@ -162,6 +162,15 @@ class LlmToolConfig(PluginConfigBase):
         ),
         json_schema_extra={"label": "仅 @ 我时可用", "order": 3},
     )
+    require_query_intent: bool = Field(
+        default=True,
+        description=(
+            "工具调用前先核对触发它的那条消息确实在查战绩：只是聊天（「我今天打了一局」"
+            "「最近手感不好」）就拦下，不查也不编数字。同一会话 10 分钟内有过查询时放行，"
+            "保证追问能接上"
+        ),
+        json_schema_extra={"label": "校验消息确实在查战绩", "order": 4},
+    )
     enable_account: bool = Field(
         default=True,
         description="查询玩家战绩总表（总体水表）",
@@ -273,6 +282,16 @@ class MentionQueryConfig(PluginConfigBase):
             "（多一次 LLM 调用，模型看不到聊天上下文）；关闭时用插件内置的固定文案"
         ),
         json_schema_extra={"label": "未绑定提示交给模型（实验性）", "order": 5},
+    )
+    simple_enabled: bool = Field(
+        default=False,
+        description=(
+            "简易查询：单独发一条「/船名recent天数」就查（如 /西西里recent30、/30近期、/recent、"
+            "/九月七日recent190），不需要 @ 机器人；@ 群友时写成 @群友/九月七日recent30 也生效。"
+            "这一条开关同时控制「不 @ 的简易查询」和「@ 群友的简易查询」；"
+            "必须整条消息只有一个 / 片段，/wws me recent 这类正常指令、@ 了其他机器人时不触发"
+        ),
+        json_schema_extra={"label": "启用简易查询（/查询，实验性）", "order": 6},
     )
 
 

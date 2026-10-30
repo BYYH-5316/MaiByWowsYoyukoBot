@@ -130,6 +130,29 @@ _RECENT_NUM_RE = re.compile(
     re.IGNORECASE,
 )
 
+# 「西西里recent」「西西里近期」：cue 后面没跟数字就是今天（1 天）。
+# 必须排除「最近30把」这类局数（cue 后面紧跟数字），否则会把 30 把当成 1 天。
+_BARE_RECENT_RE = re.compile(
+    r"(?<![A-Za-z])(?:recent|近期|最近)(?![A-Za-z])(?![^\S\r\n]*\d)", re.IGNORECASE
+)
+
+# 「30近期」「190recent」：数字写在 cue 前面的写法（用户实测 `/30近期` 指最近 30 天）
+_RECENT_NUM_PREFIX_RE = re.compile(
+    r"(?<![\w-])(\d{1,3})\s*(?:recent|近期|最近)(?![A-Za-z])", re.IGNORECASE
+)
+
+# 「单独一条 /<查询>」的写法：整条消息去掉 @ 标记后必须正好是 ``/xxx``
+_SIMPLE_PREFIX_RE = re.compile(r"^[/／]\s*(?P<payload>\S(?:[^\n]*\S)?)$")
+# 正常指令的开头词：``/wws me recent``、``/ship recent …`` 这类一律不抢。
+# 配置里的指令词（默认 wws）另外判断，这里只兜住 hikari 自己的子命令。
+_SIMPLE_BLOCK_HEADS = {
+    "wws", "me", "ship", "career", "rank", "random", "clan", "auth", "bind",
+    "help", "update", "version", "recent_rank",
+}
+# 其他机器人（yuyuko助手 / kokomi助手…）被 @ 时不抢简易查询：
+# 群里本来就是在跟官方 bot 说话，我们插一脚会莫名其妙出一张水表。
+_SIMPLE_FOREIGN_BOT_RE = re.compile(r"yuyuko|kokomi|助手|bot|robot|机器人", re.IGNORECASE)
+
 
 def _cn_to_int(value: str) -> int | None:
     """把「八」「十二」「二十」转成整数；认不出来返回 None。"""
@@ -167,9 +190,19 @@ def _days_in_text(text: str) -> int | None:
         number = _cn_to_int(match.group(1))
         if number:
             return _clamp_days(number)
+    match = _RECENT_NUM_PREFIX_RE.search(clean)
+    if match:
+        number = _cn_to_int(match.group(1))
+        if number:
+            return _clamp_days(number)
     for words, days in _TIME_WORD_DAYS:
         if any(word in clean for word in words):
             return days
+    # 「西西里recent」「西西里近期」：只有 cue、没写数字，就是今天（1 天）。
+    # 以前它被当噪音词剥掉，船名留下、天数是 None，整条消息退化成生涯总表。
+    # 夹着聊天词（「最近手感不好」）就不认，免得把闲聊当时间。
+    if _BARE_RECENT_RE.search(clean) and not _QUERY_NOISE_RE.search(clean):
+        return 1
     return None
 
 
@@ -210,6 +243,75 @@ def _ship_in_text(text: str) -> str:
     if not value or len(value) > 24 or (value.isdigit() and len(value) < 3):
         return ""
     return value
+
+
+def _query_residue_empty(text: str) -> bool:
+    """去掉时间说法、查询词、船名之后是否什么都不剩。
+
+    用来判断「整条消息就是一次查询」：``/recent``、``今天``、``西西里recent30``
+    剥完是空的；``我今天打了一局``、``最近手感不好`` 剥完还剩内容，不算。
+    """
+    value = _strip_at_tokens(text or "").strip()
+    value = value.lstrip("/／!！ ").strip()
+    if not value:
+        return False
+    ship = _ship_in_text(value)
+    rest = _CN_TIME_RE.sub(" ", value)
+    rest = _RECENT_NUM_RE.sub(" ", rest)
+    rest = _BARE_RECENT_RE.sub(" ", rest)
+    for word in (*_MENTION_NOISE_WORDS, *_TIME_WORDS):
+        rest = rest.replace(word, " ")
+    rest = _EN_NOISE_RE.sub(" ", rest)
+    rest = rest.replace("的", " ")
+    if ship:
+        rest = rest.replace(ship, " ")
+    rest = re.sub(r"(?<![\w-])\d{1,4}(?![\w-])", " ", rest)
+    rest = re.sub(r"[\s\W_]+", "", rest, flags=re.UNICODE)
+    return not rest
+
+
+def _looks_like_query(text: str) -> bool:
+    """这条消息是不是在查战绩（用于 AI 工具的消息校验）。"""
+    clean = _strip_at_tokens(text or "")
+    if not clean:
+        return False
+    # 先按「单独一条 /查询」整段判断：`/recent 怎么用` 这种虽然带 recent，也是在问用法
+    payload = _simple_query_payload(text)
+    if payload:
+        return _days_in_text(payload) is not None and _simple_payload_ok(payload)
+    if _QUERY_HINT_RE.search(clean):
+        return True
+    # 「今天」「近期」「西西里recent」：不带 / 也算，但不能夹带聊天词
+    if _QUERY_NOISE_RE.search(clean):
+        return False
+    return _days_in_text(clean) is not None and _query_residue_empty(clean)
+
+
+def _simple_payload_ok(payload: str) -> bool:
+    """整条 ``/`` 片段是不是「纯查询」：无聊天词、长度正常、剥完不剩东西。"""
+    if not payload or len(payload) > _SIMPLE_PAYLOAD_MAX:
+        return False
+    if _QUERY_NOISE_RE.search(payload):
+        return False
+    return _query_residue_empty(payload)
+
+
+def _simple_query_payload(text: str) -> str | None:
+    """整条消息是不是单独一条 ``/查询``；是就返回查询体。
+
+    只剥 @ 标记、不动正文：「@群友/西西里recent30」→ ``西西里recent30``。
+    除这一个 / 片段之外还有别的内容就返回 None（「单独的一条消息」才触发）。
+    """
+    value = _strip_at_tokens(text or "").strip()
+    if not value:
+        return None
+    match = _SIMPLE_PREFIX_RE.match(value)
+    if not match:
+        return None
+    payload = match.group("payload").strip()
+    if not payload or "/" in payload or "／" in payload:
+        return None
+    return payload
 
 
 # ── Tool 参数声明 ────────────────────────────────────────────────
@@ -373,11 +475,20 @@ _DEFAULT_MENTION_KEYWORDS = ("水表", "战绩", "查一下", "查查", "查询"
 # 一条消息算不算「战绩查询」：用来记下最近的查询发送者（见 _PENDING_QUERY_TTL）
 _QUERY_HINT_RE = re.compile(r"水表|战绩|场均|胜率|recent|wws", re.I)
 
-# 配置关键词之外、语义上明确是查询的句式。裸「最近 / 近期」不算：
+# 明显是聊天、不是查询的词。用来把「/recent 怎么用」「我今天打了一局」
+# 「最近手感不好」这类句子挡在查询之外——只靠剥词是剥不干净的。
+_QUERY_NOISE_RE = re.compile(
+    r"怎么|如何|为什么|什么|吗|呢|吧|啊|呀|的|了|是|在|用|说|问|看|帮|给|替|"
+    r"觉得|感觉|手感|打|玩|局|把|求|教|试"
+)
+_SIMPLE_PAYLOAD_MAX = 24
+
+# 配置关键词之外、语义上明确是查询的句式。裸「最近」不算：
 # 「最近手感不好」这种闲聊也会被当成查询，平白往群里甩一张水表。
 _EXTRA_QUERY_CUES = (
     re.compile(r"(?<![A-Za-z])recent(?![A-Za-z])", re.IGNORECASE),
-    re.compile(r"近期\s*\d{1,3}"),
+    # 「近期」不带数字也算：默认 1 天（见 _days_in_text）
+    re.compile(r"近期"),
     re.compile(r"查\s*[我咱俺]"),
     # 「近188天4501」：近/最近 带明确时间单位才算。只认 天/周/个月，
     # 「最近30把西西里」是局数不是天数，别误触发
@@ -1246,10 +1357,66 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             return None
 
         logger.info(f"[wows] 群聊消息未 @ 机器人，按配置拦截 AI 查询: group={group_id}")
+        if self._simple_enabled():
+            # 简易查询开着时，单独发一条 /西西里recent30 就能查，不需要 @ 我。
+            # 再让模型回「得@我呀」既是错的，也是用户明确要求关掉的提示。
+            return (
+                "用户这条消息没有 @ 我，按插件配置不能主动查战绩。"
+                "请不要输出任何战绩数据、不要调用查询工具，也不要提醒用户 @ 我、"
+                "不要教用户怎么查——插件会自动处理「单独发一条 /船名recent天数」这类简易查询。"
+                "这条消息按普通聊天处理，不要提战绩查询。"
+            )
         return (
             "用户这条消息没有 @ 我，按插件配置不能主动查战绩。"
             "请不要输出任何战绩数据，也不要调用其它查询工具，"
             "只简短提醒用户「@我 并说明要查谁的战绩」即可。"
+        )
+
+    def _query_intent_gate(
+        self, kwargs: dict[str, Any], select_index: int | None
+    ) -> str | None:
+        """校验触发工具的那条消息确实是查战绩；不是就拦下（放行返回 ``None``）。
+
+        ▍为什么还要这一道
+        ``_at_gate`` 只管「群聊有没有 @ 我」，管不住意图：规划模型会把
+        「我今天打了一局」「最近手感不好」当成查询去调工具，而写回复的模型
+        看不到工具结果，会顺口编数字。这里回查该会话最近一条消息，不是查询、
+        且这个会话最近也没有查询消息时直接拦（同一会话 10 分钟内有查询就放行，
+        保证「那亚服呢」这种追问能接上）。
+        """
+        cfg = getattr(self.config, "llm_tool", None)
+        if cfg is None or not getattr(cfg, "require_query_intent", True):
+            return None
+        if select_index is not None:
+            return None
+        try:
+            ctx = self._tool_ctx(kwargs)
+            text = self._recent_text(ctx.stream_id, ctx.group_id, ctx.user_id)
+        except Exception:  # noqa: BLE001
+            return None
+        if not text:
+            # 没有记录（插件刚启动 / Hook 没拿到消息）：放行，避免门禁静默失效
+            return None
+        if _looks_like_query(text):
+            return None
+
+        now = time.monotonic()
+        keys: list[tuple[str, str]] = []
+        if ctx.stream_id:
+            keys.append((PLATFORM.lower(), f"s:{ctx.stream_id}"))
+        if ctx.user_id:
+            keys.append((PLATFORM.lower(), f"u:{ctx.user_id}"))
+        if ctx.group_id:
+            keys.append((PLATFORM.lower(), f"g:{ctx.group_id}"))
+        for key in keys:
+            query = self._pending_query.get(key)
+            if query and now - query[2] <= _PENDING_QUERY_TTL:
+                return None
+
+        logger.info(f"[wows] 消息不是查战绩，拦截 AI 查询: {text[:60]!r}")
+        return (
+            "用户最近这条消息不是在查战绩（只是聊天）。"
+            "请不要调用查询工具、不要输出任何战绩数据；按聊天正常回应即可。"
         )
 
     # ── 群里 @ 群友查 TA 的水表 ───────────────────────────────────
@@ -1278,10 +1445,15 @@ class WowsYuyukoPlugin(MaiBotPlugin):
     async def handle_mention_query(
         self, message: Any = None, **kwargs: Any
     ) -> dict[str, str] | None:
-        """命中「@群友 + 关键词」时发起查询并中止这条消息。"""
+        """命中「@群友 + 关键词」或「单独一条 /查询」时发起查询并中止这条消息。"""
         del kwargs
         try:
-            if not isinstance(message, dict) or not self._mention_enabled():
+            if not isinstance(message, dict):
+                return None
+            simple = self._simple_query_target(message)
+            if simple is not None:
+                return self._dispatch_simple(message, simple)
+            if not self._mention_enabled():
                 return None
             target = self._mention_target(message)
             self_query = False
@@ -1334,6 +1506,108 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         cfg = getattr(self.config, "mention_query", None)
         return bool(getattr(cfg, "llm_unbound_reply", False)) if cfg is not None else False
 
+    # ── 简易查询：单独一条 /<查询> ───────────────────────────────
+    #
+    # 用户要求「不 @ 也能查」：群里直接发 `/西西里recent30`、`/30近期`，
+    # 或 `@群友/九月七日recent190`、`/recent@群友`，一条消息就是一次查询。
+    #
+    # ▍为什么要「整条消息正好是 /xxx」
+    # 聊天里提到「/recent 怎么用」「我刚才发了 /西西里recent」都不该甩水表。
+    # 所以先剥掉 @ 标记，剩下的必须正好是一个 `/` 开头的片段，多一个字都不算。
+    # ▍为什么不抢正常指令
+    # `/wws me recent`、`/ship recent 西西里 30` 这类是命令链的语法，开头词在黑名单里；
+    # `@yuyuko助手 /wws me recent` 还会整条跳过（@ 的是别的机器人）。
+    # ▍为什么必须带时间线索
+    # 只有 `/西西里` 这种裸船名不触发——它跟「随手发个 /名字」分不开，
+    # 猜错了就会回一句莫名其妙的「找不到船」。带 recent / 天数 / 今天 才认。
+    # 开关与「@ 查水表」共用一个（mention_query.simple_enabled）。
+
+    def _simple_enabled(self) -> bool:
+        cfg = getattr(self.config, "mention_query", None)
+        return bool(getattr(cfg, "simple_enabled", False)) if cfg is not None else False
+
+    def _wake_aliases(self) -> set[str]:
+        cfg = getattr(self.config, "trigger", None)
+        return _parse_wake_aliases(str(getattr(cfg, "command_aliases", "wws") or "wws"))
+
+    def _simple_query_target(self, message: dict[str, Any]) -> dict[str, Any] | None:
+        """判断这条消息是不是简易查询；是就返回要查的目标与口径。"""
+        if not self._simple_enabled() or message.get("is_notify"):
+            return None
+        text = str(message.get("processed_plain_text") or "")
+        payload = _simple_query_payload(text)
+        if not payload:
+            return None
+        head = payload.split()[0].casefold()
+        if head in _SIMPLE_BLOCK_HEADS or head in self._wake_aliases():
+            return None
+        days = _days_in_text(payload)
+        if not days:
+            return None
+        # 整个片段必须就是一次查询：「/recent 怎么用」这种带说明的不算
+        if not _simple_payload_ok(payload):
+            return None
+        ship = _ship_in_text(payload)
+        group_id = self._group_id_of(message)
+
+        targets = self._at_targets(message)
+        if targets:
+            if not group_id:
+                return None
+            # @ 的是别的机器人（yuyuko助手 / kokomi助手…）就整条让开
+            if any(_SIMPLE_FOREIGN_BOT_RE.search(name) for _id, name in targets):
+                return None
+            if len(targets) != 1:
+                return None
+            target_id, target_name = targets[0]
+            self_query = False
+        else:
+            target_id = self._sender_id_of(message)
+            target_name = self._sender_name_of(message) or "你"
+            self_query = True
+        if not target_id:
+            return None
+        return {
+            "target_id": target_id,
+            "target_name": target_name,
+            "self_query": self_query,
+            "kind": "ship_recent" if ship else "recent",
+            "ship": ship,
+            "days": days,
+        }
+
+    def _dispatch_simple(
+        self, message: dict[str, Any], plan: dict[str, Any]
+    ) -> dict[str, str] | None:
+        """简易查询命中后起后台任务并发起 abort。"""
+        stream_id = str(message.get("session_id") or "").strip()
+        group_id = self._group_id_of(message)
+        if not stream_id:
+            return None
+        if not self._token_configured() or not self.runtime.is_ready():
+            return None
+        if not self._mention_rate_ok(group_id or f"s:{stream_id}"):
+            return None
+        trigger_text = _strip_at_tokens(str(message.get("processed_plain_text") or ""))
+        trigger_text = re.sub(r"\s+", " ", trigger_text).strip()
+        logger.info(
+            f"[wows] 简易查询触发: group={group_id or '-'} target={plan['target_id']} "
+            f"name={plan['target_name']!r} 类型={plan['kind']} 船={plan['ship']!r} "
+            f"天数={plan['days']} 自查={plan['self_query']} 原文={trigger_text[:80]!r}"
+        )
+        self._spawn_mention_query(
+            stream_id=stream_id,
+            group_id=group_id,
+            bot_id=str(message.get("account_id") or ""),
+            target_id=str(plan["target_id"]),
+            target_name=str(plan["target_name"]),
+            kind=str(plan["kind"]),
+            ship=str(plan["ship"]),
+            days=plan["days"],
+            self_query=bool(plan["self_query"]),
+        )
+        return {"action": "abort"}
+
     def _mention_target(self, message: dict[str, Any]) -> tuple[str, str] | None:
         """找出被 @ 的群友 ``(用户 ID, 显示名)``；不该触发时返回 ``None``。
 
@@ -1352,6 +1626,18 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             return None
 
         bot_id = str(message.get("account_id") or "").strip()
+        for target, name in self._at_targets(message, bot_id=bot_id):
+            return target, name
+        return None
+
+    def _at_targets(
+        self, message: dict[str, Any], bot_id: str = ""
+    ) -> list[tuple[str, str]]:
+        """消息里 @ 到的其他人 ``[(用户 ID, 显示名)]``；排除 @全体 与机器人自己。"""
+        bot_id = bot_id or str(message.get("account_id") or "").strip()
+        text = str(message.get("processed_plain_text") or "")
+        found: list[tuple[str, str]] = []
+        seen: set[str] = set()
         raw = message.get("raw_message")
         for seg in raw if isinstance(raw, list) else []:
             if not isinstance(seg, dict) or str(seg.get("type") or "") not in ("at", "mention"):
@@ -1359,15 +1645,16 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             data = seg.get("data")
             data = data if isinstance(data, dict) else {}
             target = str(data.get("target_user_id") or data.get("user_id") or "").strip()
-            if not target or target in _MENTION_ALL_TARGETS or target == bot_id:
+            if not target or target in _MENTION_ALL_TARGETS or target == bot_id or target in seen:
                 continue
+            seen.add(target)
             name = (
                 str(data.get("target_user_cardname") or data.get("target_user_nickname") or "").strip()
                 or self._at_display_name(text, target)
                 or target
             )
-            return target, name
-        return None
+            found.append((target, name))
+        return found
 
     def _bot_referenced(self, message: dict[str, Any], text: str) -> bool:
         """这条消息有没有叫到机器人：@ 了它，或文字里出现它的名字/别名。"""
@@ -2116,6 +2403,8 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             else:
                 self._pending_select.pop(stream_id, None)
         blocked = self._at_gate(kwargs, options.get("select_index"))
+        if not blocked:
+            blocked = self._query_intent_gate(kwargs, options.get("select_index"))
         if blocked:
             return {"success": True, "content": blocked}
         try:
