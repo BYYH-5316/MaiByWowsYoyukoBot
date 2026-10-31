@@ -12,7 +12,7 @@ from typing import ClassVar, Literal
 
 from maibot_sdk import Field, PluginConfigBase
 
-CONFIG_SCHEMA_VERSION = "1.5.0"
+CONFIG_SCHEMA_VERSION = "1.6.0"
 
 
 class PluginSection(PluginConfigBase):
@@ -283,15 +283,28 @@ class MentionQueryConfig(PluginConfigBase):
         ),
         json_schema_extra={"label": "未绑定提示交给模型（实验性）", "order": 5},
     )
-    simple_enabled: bool = Field(
+
+
+class SimpleQueryConfig(PluginConfigBase):
+    """简易查询：单独发一条 ``/查询`` 就出图，不需要 @ 机器人。"""
+
+    __ui_label__: ClassVar[str] = "简易查询（实验性）"
+    __ui_icon__: ClassVar[str] = "terminal"
+    __ui_order__: ClassVar[int] = 5
+
+    enabled: bool = Field(
         default=False,
         description=(
-            "简易查询：单独发一条「/船名recent天数」就查（如 /西西里recent30、/30近期、/recent、"
-            "/九月七日recent190），不需要 @ 机器人；@ 群友时写成 @群友/九月七日recent30 也生效。"
-            "这一条开关同时控制「不 @ 的简易查询」和「@ 群友的简易查询」；"
-            "必须整条消息只有一个 / 片段，/wws me recent 这类正常指令、@ 了其他机器人时不触发"
+            "简易查询：单独发一条「/查询」就出图，不必 @ 机器人。"
+            "写法：/西西里recent30（单船近 30 天）、/西西里 或 /西西里水表（这艘船的生涯）、"
+            "/30近期（账号近 30 天）、/recent 或 /今天（账号近 1 天）、/水表 或 /查水表（账号总表）；"
+            "@ 群友时写成 @群友/西西里recent30 也生效。"
+            "必须整条消息只有这一个 / 片段：/wws me recent 这类正常指令不抢，"
+            "@ 了其他机器人（如官方水表 bot）时整条不响应。"
+            "注意：本功能复用「群聊 @ 查询」与「AI 对话查询」的查询逻辑，"
+            "这两个开关至少要打开一个，简易查询才会生效"
         ),
-        json_schema_extra={"label": "启用简易查询（/查询，实验性）", "order": 6},
+        json_schema_extra={"label": "启用简易查询（/查询，实验性）", "order": 0},
     )
 
 
@@ -303,3 +316,4 @@ class WowsSettings(PluginConfigBase):
     wows: WowsConfig = Field(default_factory=WowsConfig)
     llm_tool: LlmToolConfig = Field(default_factory=LlmToolConfig)
     mention_query: MentionQueryConfig = Field(default_factory=MentionQueryConfig)
+    simple_query: SimpleQueryConfig = Field(default_factory=SimpleQueryConfig)

@@ -73,6 +73,7 @@ from .yuyuko_llm import (
     resolve_account_id,
     resolve_identity,
     resolve_ship_name,
+    ship_name_exists,
     user_error_text,
 )
 from hikari_core import callback_hikari, init_hikari
@@ -149,9 +150,12 @@ _SIMPLE_BLOCK_HEADS = {
     "wws", "me", "ship", "career", "rank", "random", "clan", "auth", "bind",
     "help", "update", "version", "recent_rank",
 }
-# 其他机器人（yuyuko助手 / kokomi助手…）被 @ 时不抢简易查询：
-# 群里本来就是在跟官方 bot 说话，我们插一脚会莫名其妙出一张水表。
-_SIMPLE_FOREIGN_BOT_RE = re.compile(r"yuyuko|kokomi|助手|bot|robot|机器人", re.IGNORECASE)
+# 别的机器人（官方水表 bot：战舰世界yuyuko助手 / 战舰世界-kokomi…）被 @ 时整条让开：
+# 群里那条消息本来就是在跟官方 bot 说话，我们插一脚会莫名其妙多出一张水表。
+# 判定用 @ 列表里的显示名，机器人自己的名字池（宿主配置 + 群里学到的名片）另外排除。
+_FOREIGN_BOT_NAME_RE = re.compile(r"yuyuko|kokomi|助手|bot|robot|机器人", re.IGNORECASE)
+# 船名里出现连词就说明这条消息点了不止一艘船，简易查询不接（交回正常路径）
+_SHIP_CONJUNCTION_RE = re.compile(r"[和与及或、,，/]")
 
 
 def _cn_to_int(value: str) -> int | None:
@@ -278,7 +282,7 @@ def _looks_like_query(text: str) -> bool:
     # 先按「单独一条 /查询」整段判断：`/recent 怎么用` 这种虽然带 recent，也是在问用法
     payload = _simple_query_payload(text)
     if payload:
-        return _days_in_text(payload) is not None and _simple_payload_ok(payload)
+        return _simple_payload_kind(payload, _ship_in_text(payload)) is not None
     if _QUERY_HINT_RE.search(clean):
         return True
     # 「今天」「近期」「西西里recent」：不带 / 也算，但不能夹带聊天词
@@ -294,6 +298,38 @@ def _simple_payload_ok(payload: str) -> bool:
     if _QUERY_NOISE_RE.search(payload):
         return False
     return _query_residue_empty(payload)
+
+
+def _query_cue_only(payload: str) -> bool:
+    """整段只有「水表 / 查水表 / 出战绩」这类查询词（可带动词），没有船名也没有时间。"""
+    value = payload
+    for word in (*_MENTION_NOISE_WORDS, *_DEFAULT_MENTION_KEYWORDS):
+        value = value.replace(word, " ")
+    value = re.sub(r"[查看来整发出求]", " ", value)
+    value = re.sub(r"[\s\W_]+", "", value, flags=re.UNICODE)
+    return not value
+
+
+def _simple_payload_kind(payload: str, ship: str) -> str | None:
+    """把一条 ``/xxx`` 查询体解析成口径；不像一次查询就返回 ``None``。
+
+    有船名 + 有时间 = ``ship_recent``（单船近期）；只有船名（``/西西里``、
+    ``/西西里水表``）= ``ship``（这艘船的生涯总表）；只有时间（``/30近期``、
+    ``/recent``）= ``recent``；光秃秃的「水表 / 查水表 / 战绩」= ``account``（账号总表）。
+
+    三者都没有就不认：``/哈哈`` 这种随手发一个斜杠词的交回正常聊天路径。
+    """
+    if not _simple_payload_ok(payload):
+        return None
+    days = _days_in_text(payload)
+    has_ship = bool(ship) and not _SHIP_CONJUNCTION_RE.search(ship)
+    if days:
+        return "ship_recent" if has_ship else "recent"
+    if _query_cue_only(payload):
+        return "account"
+    if has_ship:
+        return "ship"
+    return None
 
 
 def _simple_query_payload(text: str) -> str | None:
@@ -437,7 +473,7 @@ _MENTION_NOISE_WORDS = (
 
 # 船名里要剥掉的英文参数词；按整词匹配，AL / ARP / HSF 这类联动船前缀不在表内
 _EN_NOISE_RE = re.compile(
-    r"(?<![A-Za-z])(?:recent|career|single|solo|overall|total|all|ship|wows|"
+    r"(?<![A-Za-z])(?:recent|career|single|solo|overall|total|all|ship|wows|wws|"
     r"water|meter|stats?|avg|winrate|wr|pr)(?![A-Za-z])",
     re.IGNORECASE,
 )
@@ -1168,6 +1204,9 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             return True
 
         text = str(message.get("processed_plain_text") or kwargs.get("text") or "")
+        if self._foreign_bot_at(message):
+            logger.info(f"[wows] 这条消息 @ 的是别的机器人，指令不响应: {text[:60]!r}")
+            return False
         cleaned = _strip_at_tokens(text).casefold()
         woke_by_at = self._message_is_at(message) or any(
             name.casefold() in cleaned for name in self._bot_names()
@@ -1450,6 +1489,13 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         try:
             if not isinstance(message, dict):
                 return None
+            # @ 的是官方水表 bot（yuyuko助手 / kokomi…）就整条让开，指令路径同样不响应
+            if self._foreign_bot_at(message):
+                logger.info(
+                    "[wows] 这条消息 @ 的是别的机器人，不响应: "
+                    f"{_strip_at_tokens(str(message.get('processed_plain_text') or ''))[:60]!r}"
+                )
+                return None
             simple = self._simple_query_target(message)
             if simple is not None:
                 return self._dispatch_simple(message, simple)
@@ -1508,7 +1554,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
 
     # ── 简易查询：单独一条 /<查询> ───────────────────────────────
     #
-    # 用户要求「不 @ 也能查」：群里直接发 `/西西里recent30`、`/30近期`，
+    # 用户要求「不 @ 也能查」：群里直接发 `/西西里recent30`、`/30近期`、`/水表`，
     # 或 `@群友/九月七日recent190`、`/recent@群友`，一条消息就是一次查询。
     #
     # ▍为什么要「整条消息正好是 /xxx」
@@ -1516,19 +1562,53 @@ class WowsYuyukoPlugin(MaiBotPlugin):
     # 所以先剥掉 @ 标记，剩下的必须正好是一个 `/` 开头的片段，多一个字都不算。
     # ▍为什么不抢正常指令
     # `/wws me recent`、`/ship recent 西西里 30` 这类是命令链的语法，开头词在黑名单里；
-    # `@yuyuko助手 /wws me recent` 还会整条跳过（@ 的是别的机器人）。
-    # ▍为什么必须带时间线索
-    # 只有 `/西西里` 这种裸船名不触发——它跟「随手发个 /名字」分不开，
-    # 猜错了就会回一句莫名其妙的「找不到船」。带 recent / 天数 / 今天 才认。
-    # 开关与「@ 查水表」共用一个（mention_query.simple_enabled）。
+    # `@yuyuko助手 /wws me recent` 还会整条跳过（@ 的是别的机器人，见 _foreign_bot_at）。
+    # ▍口径怎么定
+    # 有船名 + 有时间 = 单船近期；只有船名（`/西西里`、`/西西里水表`）= 这艘船的生涯总表；
+    # 只有时间（`/30近期`）= 账号近期；光秃秃一个「水表 / 查水表 / 战绩」= 账号总表（生涯）。
+    # 三者都没有就不认——`/哈哈` 这种随手发一个斜杠词的，交回正常聊天路径。
+    # ▍开关
+    # 独立一组 `[simple_query] enabled`，并且要「群聊 @ 查询」或「AI 对话查询」至少开一个
+    # 才生效：简易查询复用的正是那两条路径的查询与发图逻辑。
 
     def _simple_enabled(self) -> bool:
-        cfg = getattr(self.config, "mention_query", None)
-        return bool(getattr(cfg, "simple_enabled", False)) if cfg is not None else False
+        """简易查询总开关：自身开着，且「@ 查询」或「AI 对话查询」至少开了一个。"""
+        cfg = getattr(self.config, "simple_query", None)
+        if cfg is None or not bool(getattr(cfg, "enabled", False)):
+            return False
+        mention = getattr(self.config, "mention_query", None)
+        llm = getattr(self.config, "llm_tool", None)
+        return bool(getattr(mention, "enabled", False) if mention is not None else False) or bool(
+            getattr(llm, "enabled", False) if llm is not None else False
+        )
 
     def _wake_aliases(self) -> set[str]:
         cfg = getattr(self.config, "trigger", None)
         return _parse_wake_aliases(str(getattr(cfg, "command_aliases", "wws") or "wws"))
+
+    def _is_foreign_bot_name(self, name: str) -> bool:
+        """这个显示名是不是别的机器人（官方水表 bot）；机器人自己的名字池不算。"""
+        display = str(name or "").strip().casefold()
+        if not display:
+            return False
+        if display in {own.casefold() for own in self._bot_names() if own}:
+            return False
+        return bool(_FOREIGN_BOT_NAME_RE.search(display))
+
+    def _foreign_bot_at(self, message: dict[str, Any]) -> bool:
+        """这条消息 @ 的是不是别的机器人（官方水表 bot）。
+
+        群里 `@战舰世界yuyuko助手 /wws me recent` 是在跟官方 bot 说话，我们插一脚
+        就会莫名其妙多出一张水表，所以指令路径与 @ / 简易查询路径一律不响应。
+        同时也 @ 了我们自己时不算——那条消息明确是冲我们来的。
+        """
+        if not self._group_id_of(message):
+            return False
+        if self._message_is_at(message):
+            return False
+        return any(
+            self._is_foreign_bot_name(name) for _target_id, name in self._at_targets(message)
+        )
 
     def _simple_query_target(self, message: dict[str, Any]) -> dict[str, Any] | None:
         """判断这条消息是不是简易查询；是就返回要查的目标与口径。"""
@@ -1542,20 +1622,23 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         if head in _SIMPLE_BLOCK_HEADS or head in self._wake_aliases():
             return None
         days = _days_in_text(payload)
-        if not days:
+        # 机器人自己的名字不能当船名（`/睦子米水表` 里的「睦子米」不是船）
+        ship = _ship_in_text(self._strip_bot_names(payload))
+        kind = _simple_payload_kind(payload, ship)
+        if kind is None:
             return None
-        # 整个片段必须就是一次查询：「/recent 怎么用」这种带说明的不算
-        if not _simple_payload_ok(payload):
-            return None
-        ship = _ship_in_text(payload)
+        if kind in ("recent", "account"):
+            ship = ""
+        if kind in ("ship", "account"):
+            days = None
         group_id = self._group_id_of(message)
 
         targets = self._at_targets(message)
         if targets:
             if not group_id:
                 return None
-            # @ 的是别的机器人（yuyuko助手 / kokomi助手…）就整条让开
-            if any(_SIMPLE_FOREIGN_BOT_RE.search(name) for _id, name in targets):
+            # @ 的是别的机器人（官方水表 bot）就整条让开，即使同时也 @ 了我们
+            if any(self._is_foreign_bot_name(name) for _target_id, name in targets):
                 return None
             if len(targets) != 1:
                 return None
@@ -1571,9 +1654,13 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             "target_id": target_id,
             "target_name": target_name,
             "self_query": self_query,
-            "kind": "ship_recent" if ship else "recent",
+            "kind": kind,
             "ship": ship,
             "days": days,
+            # 「/西西里」这种光给船名、没给时间的，离线分不出是船还是随手打的词
+            # （`/哈哈`），先拿上游百科校验一道，查不到就整条静默忽略。
+            # 带时间线索的（`/西西里recent30`）明显是在查战绩，不多花一次请求。
+            "verify_ship": bool(ship) and not days,
         }
 
     def _dispatch_simple(
@@ -1593,7 +1680,8 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         logger.info(
             f"[wows] 简易查询触发: group={group_id or '-'} target={plan['target_id']} "
             f"name={plan['target_name']!r} 类型={plan['kind']} 船={plan['ship']!r} "
-            f"天数={plan['days']} 自查={plan['self_query']} 原文={trigger_text[:80]!r}"
+            f"天数={plan['days']} 自查={plan['self_query']} 校验船名={bool(plan.get('verify_ship'))} "
+            f"原文={trigger_text[:80]!r}"
         )
         self._spawn_mention_query(
             stream_id=stream_id,
@@ -1605,6 +1693,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             ship=str(plan["ship"]),
             days=plan["days"],
             self_query=bool(plan["self_query"]),
+            verify_ship=bool(plan.get("verify_ship")),
         )
         return {"action": "abort"}
 
@@ -1627,6 +1716,9 @@ class WowsYuyukoPlugin(MaiBotPlugin):
 
         bot_id = str(message.get("account_id") or "").strip()
         for target, name in self._at_targets(message, bot_id=bot_id):
+            # @ 的是官方水表 bot 就跳过，别去查它的绑定（必然回「没绑定」）
+            if self._is_foreign_bot_name(name):
+                continue
             return target, name
         return None
 
@@ -1890,9 +1982,15 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         ship: str = "",
         days: int | None = None,
         self_query: bool = False,
+        verify_ship: bool = False,
     ) -> None:
         """查被 @ 的人（或发送者自己）绑定的账号，按原文决定口径，发说明 + 水表图。"""
         try:
+            if verify_ship and ship and (await ship_name_exists(ship)) is False:
+                # 「/哈哈」这种随手发一个斜杠词的：消息已经被 abort 了，
+                # 这里再回一句「没找到这艘船」纯属噪音，直接静默丢掉。
+                logger.info(f"[wows] 简易查询跳过：{ship!r} 不是上游已知的船名")
+                return
             # 绑定关系每次现查：5 分钟缓存会让「刚绑定的人」被判成未绑定，
             # 换了默认账号时说明里的名字也会停在旧号上。这条路径本来就只在 @ 时跑一次。
             identity = await resolve_identity(PLATFORM, target_id, refresh=True)

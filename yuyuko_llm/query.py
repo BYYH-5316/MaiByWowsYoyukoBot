@@ -200,6 +200,44 @@ async def resolve_ship_name(raw: str) -> str | None:
     return name
 
 
+async def ship_name_exists(raw: str) -> bool | None:
+    """上游百科里有没有这个名字的船。
+
+    返回 ``True`` / ``False``；请求出错或上游没回 200 时返回 ``None``（判断不了），
+    调用方应当**照常查**，别把网络抖动当成「船名写错了」。
+
+    ▍为什么需要它
+    简易查询允许「单独一条 ``/船名``」直接查生涯，可离线分不出 ``/西西里`` 和
+    ``/哈哈``：前者是船、后者是随手打的一个词。用百科搜索兜一道，
+    查不到就整条静默忽略，免得往群里甩一句莫名其妙的「没找到这艘船」。
+    """
+    name = (raw or "").strip()
+    if not name:
+        return False
+    url = f"{hikari_config.yuyuko_url}/public/wows/encyclopedia/ship/search"
+    params = {
+        "country": "",
+        "level": "",
+        "shipName": name,
+        "shipType": "",
+        "groupType": "default",
+    }
+    try:
+        from hikari_core.core.http_client import get_client_yuyuko
+        from hikari_core.core.model import Hikari_Model
+
+        client = await get_client_yuyuko(Hikari_Model().UserInfo)
+        resp = await client.get(url, params=params, timeout=20)
+        result = resp.json()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"船名 {name!r} 校验请求失败: {e!r}")
+        return None
+    if result.get("code") != 200:
+        logger.info(f"船名 {name!r} 校验未拿到 200（{result.get('message')}），按存在处理")
+        return None
+    return bool(result.get("data"))
+
+
 def _with_identity(command_text: str, identity: dict[str, str] | None) -> str:
     """把「服务器 + 昵称」前置到指令前，让 hikari 走查别人的正常路径。
 

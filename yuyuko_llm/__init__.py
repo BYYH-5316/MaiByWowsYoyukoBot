@@ -43,6 +43,7 @@ from .query import (
     resolve_account_id,
     resolve_identity,
     resolve_ship_name,
+    ship_name_exists,
 )
 from .tool_spec import (
     BIND_GUIDE,
@@ -89,5 +90,6 @@ __all__ = [
     "resolve_account_id",
     "resolve_identity",
     "resolve_ship_name",
+    "ship_name_exists",
     "user_error_text",
 ]
