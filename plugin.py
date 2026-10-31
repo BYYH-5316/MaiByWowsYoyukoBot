@@ -142,6 +142,23 @@ _RECENT_NUM_PREFIX_RE = re.compile(
     r"(?<![\w-])(\d{1,3})\s*(?:recent|近期|最近)(?![A-Za-z])", re.IGNORECASE
 )
 
+# 「半个月」「一个半月」「两个半月」：半月是固定说法，前面可以不带数字。
+# 一个半月 = 45 天（用户口径：一个月 30 + 半个月 15）
+_CN_HALF_MONTH_RE = re.compile(
+    r"(?:(?P<n>\d{1,2}|[一二两三四五六七八九十]{1,3})\s*个\s*)?半\s*个?\s*月"
+)
+
+# 「7日水表」的「日」= 天。只认阿拉伯数字：中文数字的「九月七日」是一条船，
+# 把它当 7 天会把船名剥成「九月」（用户实测这条船在）。
+_NUM_DAY_RE = re.compile(r"(?<![A-Za-z\d-])(\d{1,3})\s*日")
+
+# 「近期无比战绩30」「最近 大和 30」：天数写在船名后面，没紧贴 recent/近期。
+# 只在句子里确实有 recent/近期/最近 时才把独立数字当天数；
+# 「最近30把」「连输5场」这类局数由后面的负向断言排除。
+_CUE_ANY_DAYS_RE = re.compile(
+    r"(?<![A-Za-z\d-])(\d{1,3})(?!\s*(?:[A-Za-z\d]|场|把|局|次|艘|条|只|个))"
+)
+
 # 「单独一条 /<查询>」的写法：整条消息去掉 @ 标记后必须正好是 ``/xxx``
 _SIMPLE_PREFIX_RE = re.compile(r"^[/／]\s*(?P<payload>\S(?:[^\n]*\S)?)$")
 # 正常指令的开头词：``/wws me recent``、``/ship recent …`` 这类一律不抢。
@@ -182,12 +199,24 @@ def _days_in_text(text: str) -> int | None:
     if not text:
         return None
     clean = _strip_at_tokens(text)
+    # 半个月 / 一个半月 先认：数字部分要么没有、要么被「半」隔开，_CN_TIME_RE 抓不到
+    half = _CN_HALF_MONTH_RE.search(clean)
+    if half:
+        number = _cn_to_int(half.group("n")) if half.group("n") else 0
+        if number is not None:
+            return _clamp_days(number * 30 + 15)
+    day = _NUM_DAY_RE.search(clean)
+    if day:
+        return _clamp_days(int(day.group(1)))
     match = _CN_TIME_RE.search(clean)
     if match:
         number = _cn_to_int(match.group(1))
         if number:
             unit = match.group(2)
-            factor = 30 if unit.endswith("月") else 7 if unit.endswith("周") else 1
+            if unit.endswith("周"):
+                # 用户口径：一周 7 天，两周按半个月算 15 天
+                return _clamp_days(15 if number == 2 else number * 7)
+            factor = 30 if unit.endswith("月") else 1
             return _clamp_days(number * factor)
     match = _RECENT_NUM_RE.search(clean)
     if match:
@@ -206,6 +235,12 @@ def _days_in_text(text: str) -> int | None:
     # 以前它被当噪音词剥掉，船名留下、天数是 None，整条消息退化成生涯总表。
     # 夹着聊天词（「最近手感不好」）就不认，免得把闲聊当时间。
     if _BARE_RECENT_RE.search(clean) and not _QUERY_NOISE_RE.search(clean):
+        # 「近期无比战绩30」：数字被船名隔开、没紧贴 cue，也算天数
+        match = _CUE_ANY_DAYS_RE.search(clean)
+        if match:
+            number = _cn_to_int(match.group(1))
+            if number:
+                return _clamp_days(number)
         return 1
     return None
 
@@ -219,6 +254,10 @@ def _ship_in_text(text: str) -> str:
     if not text:
         return ""
     value = _strip_at_tokens(text)
+    # 「半个月」「一个半月」先剥：_CN_TIME_RE 的数字部分抓不到「半」
+    value = _CN_HALF_MONTH_RE.sub(" ", value)
+    # 「7日水表」：日 = 天，不剥的话「7日」会被当成船名
+    value = _NUM_DAY_RE.sub(" ", value)
     # 「近7天」「最近90天」「八个月」先整段剥。必须赶在 _RECENT_NUM_RE 前：
     # 「最近90天」若先按裸数字剥掉「最近90」，剩下的「天」会粘到船名上（天4501）
     value = _CN_TIME_RE.sub(" ", value)
@@ -260,7 +299,9 @@ def _query_residue_empty(text: str) -> bool:
     if not value:
         return False
     ship = _ship_in_text(value)
-    rest = _CN_TIME_RE.sub(" ", value)
+    rest = _CN_HALF_MONTH_RE.sub(" ", value)
+    rest = _NUM_DAY_RE.sub(" ", rest)
+    rest = _CN_TIME_RE.sub(" ", rest)
     rest = _RECENT_NUM_RE.sub(" ", rest)
     rest = _BARE_RECENT_RE.sub(" ", rest)
     for word in (*_MENTION_NOISE_WORDS, *_TIME_WORDS):
@@ -1657,10 +1698,11 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             "kind": kind,
             "ship": ship,
             "days": days,
-            # 「/西西里」这种光给船名、没给时间的，离线分不出是船还是随手打的词
-            # （`/哈哈`），先拿上游百科校验一道，查不到就整条静默忽略。
-            # 带时间线索的（`/西西里recent30`）明显是在查战绩，不多花一次请求。
-            "verify_ship": bool(ship) and not days,
+            # 严格触发：只要抠出了船名，就先拿上游百科校验这个船名真的存在。
+            # 离线分不出 `/西西里` 和 `/今日摸鱼`、`/哈哈`，带时间的也可能是随手发个
+            # 斜杠词（群里 `@某人 /今日摸鱼` 实测被当成「猪猪 · 最近 1 天」去查），
+            # 查不到就整条静默忽略，连「未绑定」也不回。
+            "verify_ship": bool(ship),
         }
 
     def _dispatch_simple(
@@ -2051,7 +2093,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
                             target_name,
                             actual_server or server,
                             actual_account or account,
-                            self._mention_scope(outcome.kind, ship, outcome.days, days),
+                            self._mention_scope(outcome.kind, ship, outcome.days),
                             self_query=self_query,
                         ),
                     )
@@ -2073,7 +2115,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         group_id: str,
         stream_id: str,
     ) -> _MentionOutcome:
-        """按计划查一次；单船近期没数据时先放宽窗口，找不到船才退回账号。
+        """按计划查一次；单船近期没数据就如实说明，找不到船才退回账号。
 
         ▍为什么不再拼「服务器 + 昵称」
         被查人的 QQ 已经作为 PlatformId 传进 hikari，me 模式本身就是「查这个人绑定的
@@ -2083,8 +2125,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         ▍为什么不再拿账号近期顶替单船
         以前「单船 60 天」空窗口会直接退回账号 60 天总表：图是总表、说明却写着
         「近期没开过」，用户看到的就是「明明没记录怎么还出水表」。
-        现在先把窗口放宽到一年（单船接口的空窗口多半是战绩落在窗口外），
-        一年也没有才明确说「没有出战记录」，不发任何水表。
+        也不再自动放宽到一年：用户要 30 天就只查 30 天，窗口空就如实说没有。
         """
 
         async def raw_call(command_text: str):
@@ -2117,29 +2158,14 @@ class WowsYuyukoPlugin(MaiBotPlugin):
                 return _MentionOutcome(hikari, kind, days)
 
             if _window_empty(hikari):
-                if days < MAX_RECENT_DAYS:
-                    logger.info(
-                        f"[wows] @ 单船近期 {ship} 近 {days} 天无记录，放宽到 {MAX_RECENT_DAYS} 天"
-                    )
-                    widened = await call(
-                        build_ship_recent_command(ship, MAX_RECENT_DAYS)
-                    )
-                    if widened.Status == "success":
-                        return _MentionOutcome(
-                            widened,
-                            kind,
-                            MAX_RECENT_DAYS,
-                            f"「{ship}」最近 {days} 天没有出战记录，给你看最近 {MAX_RECENT_DAYS} 天的~",
-                        )
-                    hikari = widened
-                if _window_empty(hikari):
-                    return _MentionOutcome(
-                        hikari.failed(
-                            f"「{ship}」最近 {MAX_RECENT_DAYS} 天没有出战记录，没有单船水表可看"
-                        ),
-                        kind,
-                        MAX_RECENT_DAYS,
-                    )
+                # 要几天就只查几天：不再放宽到一年。窗口空就是这片窗口里没开过，
+                # 拿一年内的旧场次顶上来会让人误以为是最近打的（用户明确要求不放宽）。
+                logger.info(f"[wows] @ 单船近期 {ship} 近 {days} 天无记录，如实回，不放宽")
+                return _MentionOutcome(
+                    hikari.failed(f"「{ship}」最近 {days} 天没有出战记录，没有单船水表可看"),
+                    kind,
+                    days,
+                )
 
             if _ship_missing(hikari):
                 logger.info(f"[wows] @ 单船近期 {ship} 查不到该船数据，直接说明原因")
@@ -2254,12 +2280,8 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         return None
 
     @staticmethod
-    def _mention_scope(
-        kind: str, ship: str, days: int | None, requested: int | None = None
-    ) -> str:
+    def _mention_scope(kind: str, ship: str, days: int | None) -> str:
         if kind == "ship_recent" and ship and days:
-            if requested and requested != days:
-                return f"{ship} · 最近 {days} 天（{requested} 天无记录，已放宽）"
             return f"{ship} · 最近 {days} 天"
         if kind == "ship" and ship:
             return f"{ship} · 生涯"
@@ -2881,36 +2903,9 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             select_index=select_index,
         )
 
-        # 窗口内没战绩时先放宽到一年：用户问 60 天，船可能 61~366 天前开过，
-        # 直接回「无记录」就是拿窗口当结论，放宽后仍空才是真的没开过。
-        # 注意 `_run_tool` 永远返回 success=True（业务失败也走 content），只能看内容判断。
-        if (
-            select_index is None
-            and "无recent记录" in str(payload.get("content") or "")
-            and (days_used or 0) < MAX_RECENT_DAYS
-        ):
-            logger.info(f"[wows] 单船近期 {ship} 近 {days_used} 天无记录，放宽到 {MAX_RECENT_DAYS} 天")
-            widened = await self._run_tool(
-                kwargs,
-                build_ship_recent_command(ship, MAX_RECENT_DAYS, server, nickname),
-                "ship_recent",
-                "wws_ship_recent",
-                inject_identity=not nickname,
-                prefer_exact=ship,
-            )
-            if str(widened.get("content") or "").startswith("以下是"):
-                return self._with_window(
-                    widened,
-                    MAX_RECENT_DAYS,
-                    note=f"最近 {MAX_RECENT_DAYS} 天（用户要的 {days_used} 天无记录，已放宽）",
-                )
-            return {
-                "success": True,
-                "content": (
-                    f"「{ship}」最近 {MAX_RECENT_DAYS} 天没有出战记录，没有单船水表可看。"
-                    "直接告诉用户这船近三个月没开过，不要拿整账号数据顶替。"
-                ),
-            }
+        # 窗口内没战绩就如实说，不放大到一年：用户要几天就只查几天，
+        # 拿一年里的旧场次顶上来会让人误以为是最近打的（用户明确要求不放宽）。
+        # 注意 `_run_tool` 永远返回 success=True（业务失败也走 content）。
         return self._with_window(payload, days)
 
     @Tool(
