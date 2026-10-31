@@ -560,6 +560,12 @@ _QUERY_NOISE_RE = re.compile(
 )
 _SIMPLE_PAYLOAD_MAX = 24
 
+# 宿主在 chat.receive.after_process 之后才分发 @Command（点歌 / 选歌 …）。
+# 简易查询在 Hook 里 abort 会把这些命令整个吃掉，所以先拉一份别的插件注册的
+# 命令规则（宿主 component.get_all_plugins，60 秒缓存），命中就整条让开。
+_PLUGIN_ID = "community.wows-yuyuko"
+_OTHER_COMMAND_TTL = 60.0
+
 # 配置关键词之外、语义上明确是查询的句式。裸「最近」不算：
 # 「最近手感不好」这种闲聊也会被当成查询，平白往群里甩一张水表。
 _EXTRA_QUERY_CUES = (
@@ -985,6 +991,11 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         # 「群里 @ 群友查水表」的限流记录与后台任务
         self._mention_hits: dict[str, deque[float]] = {}
         self._mention_tasks: set[asyncio.Task] = set()
+        # 别的插件注册的命令规则 (build 时刻, [(任务正则, 别名...)] / None=还没拉过)
+        self._other_command_cache: tuple[float, list[tuple[Any, tuple[str, ...]]] | None] = (
+            0.0,
+            None,
+        )
 
     @property
     def runtime(self) -> CoreRuntime:
@@ -1537,6 +1548,13 @@ class WowsYuyukoPlugin(MaiBotPlugin):
                     f"{_strip_at_tokens(str(message.get('processed_plain_text') or ''))[:60]!r}"
                 )
                 return None
+            text = str(message.get("processed_plain_text") or "")
+            # 别的插件注册过的命令（点歌 / 选歌 …）：宿主稍后要分发，别在这儿 abort
+            if _simple_query_payload(text) and await self._taken_by_other_command(text):
+                logger.info(
+                    f"[wows] 简易查询让路：{_strip_at_tokens(text)[:60]!r} 是其它插件的命令"
+                )
+                return None
             simple = self._simple_query_target(message)
             if simple is not None:
                 return self._dispatch_simple(message, simple)
@@ -1650,6 +1668,59 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         return any(
             self._is_foreign_bot_name(name) for _target_id, name in self._at_targets(message)
         )
+
+    async def _other_commands(self) -> list[tuple[re.Pattern | None, tuple[str, ...]]]:
+        """别的插件注册的命令规则 ``[(正则, 别名...)]``；拉不到就返回空表（按旧逻辑走）。
+
+        宿主是在 ``chat.receive.after_process`` 之后才分发 ``@Command`` 的，我们在这
+        一步 abort 就会把 ``/点歌 …`` 这类命令整个吃掉（2026-10-31 实测：音乐插件
+        收不到消息）。命令表从宿主的 component 能力拿，60 秒缓存一次。
+        """
+        now = time.monotonic()
+        cached_at, cached = self._other_command_cache
+        if cached is not None and now - cached_at < _OTHER_COMMAND_TTL:
+            return cached
+        rules: list[tuple[re.Pattern | None, tuple[str, ...]]] = []
+        try:
+            plugins = await self.ctx.component.get_all_plugins()
+        except Exception as e:  # noqa: BLE001
+            # 低版本宿主没有这个能力：保留上一份缓存，没有就退回旧行为
+            logger.debug(f"[wows] 读取其它插件命令失败（简易查询按旧逻辑走）: {e!r}")
+            self._other_command_cache = (now, cached or [])
+            return self._other_command_cache[1]
+        items = plugins.items() if isinstance(plugins, dict) else ()
+        for plugin_id, info in items:
+            if str(plugin_id) == _PLUGIN_ID or not isinstance(info, dict):
+                continue
+            for comp in info.get("components") or []:
+                if not isinstance(comp, dict) or not comp.get("enabled", True):
+                    continue
+                if str(comp.get("type") or "").upper() != "COMMAND":
+                    continue
+                meta = comp.get("metadata") if isinstance(comp.get("metadata"), dict) else {}
+                pattern = None
+                raw = str(meta.get("command_pattern") or "")
+                if raw:
+                    try:
+                        pattern = re.compile(raw)
+                    except re.error:
+                        pattern = None
+                aliases = tuple(str(a) for a in (meta.get("aliases") or []) if a)
+                if pattern is not None or aliases:
+                    rules.append((pattern, aliases))
+        self._other_command_cache = (now, rules)
+        if cached is None:
+            logger.info(f"[wows] 已加载其它插件命令规则 {len(rules)} 条（简易查询遇命令让路）")
+        return rules
+
+    async def _taken_by_other_command(self, text: str) -> bool:
+        """这条消息是不是别的插件注册的命令；是就让开后由宿主去分发。"""
+        for pattern, aliases in await self._other_commands():
+            if pattern is not None and pattern.search(text):
+                return True
+            if any(alias and text.startswith(alias) for alias in aliases):
+                return True
+        return False
 
     def _simple_query_target(self, message: dict[str, Any]) -> dict[str, Any] | None:
         """判断这条消息是不是简易查询；是就返回要查的目标与口径。"""

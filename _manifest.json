@@ -69,7 +69,8 @@
   "capabilities": [
     "send.text",
     "send.image",
-    "maisaka.reply.generate"
+    "maisaka.reply.generate",
+    "component.get_all_plugins"
   ],
   "changelog": "CHANGELOG.md",
   "i18n": {
