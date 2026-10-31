@@ -126,21 +126,27 @@ _CN_TIME_RE = re.compile(
 
 # 「西西里recent36」「西西里近期95」：带 recent / 近期 的裸数字就是天数。
 # 后面跟着 场/把/局/艘 时不算——那是「最近 30 把」这种局数，不是天数。
+# 「随机」在玩家口语里就是随机战/近期这一档（用户口径：`/30日随机` = 最近 30 天，
+# 「近期随机战绩」= `wws me recent 1`），所以和 recent / 近期 等价。
 _RECENT_NUM_RE = re.compile(
-    r"(?<![A-Za-z])(?:recent|近期|最近)\s*(\d{1,3})(?!\s*(?:[A-Za-z0-9]|场|把|局|次|艘|条|只|个))",
+    r"(?<![A-Za-z])(?:recent|近期|最近|随机)\s*(\d{1,3})(?!\s*(?:[A-Za-z0-9]|场|把|局|次|艘|条|只|个))",
     re.IGNORECASE,
 )
 
 # 「西西里recent」「西西里近期」：cue 后面没跟数字就是今天（1 天）。
 # 必须排除「最近30把」这类局数（cue 后面紧跟数字），否则会把 30 把当成 1 天。
 _BARE_RECENT_RE = re.compile(
-    r"(?<![A-Za-z])(?:recent|近期|最近)(?![A-Za-z])(?![^\S\r\n]*\d)", re.IGNORECASE
+    r"(?<![A-Za-z])(?:recent|近期|最近|随机)(?![A-Za-z])(?![^\S\r\n]*\d)", re.IGNORECASE
 )
 
 # 「30近期」「190recent」：数字写在 cue 前面的写法（用户实测 `/30近期` 指最近 30 天）
 _RECENT_NUM_PREFIX_RE = re.compile(
-    r"(?<![\w-])(\d{1,3})\s*(?:recent|近期|最近)(?![A-Za-z])", re.IGNORECASE
+    r"(?<![\w-])(\d{1,3})\s*(?:recent|近期|最近|随机)(?![A-Za-z])", re.IGNORECASE
 )
+
+# 句子里是否出现过「近期」这类线索：用来判断「西西里随机30」的 30 是天数，
+# 不能粘在船名后面（「西西里30」上游查不到这艘船）
+_ANY_RECENT_RE = re.compile(r"(?:recent|近期|最近|随机)", re.IGNORECASE)
 
 # 「半个月」「一个半月」「两个半月」：半月是固定说法，前面可以不带数字。
 # 一个半月 = 45 天（用户口径：一个月 30 + 半个月 15）
@@ -254,6 +260,7 @@ def _ship_in_text(text: str) -> str:
     if not text:
         return ""
     value = _strip_at_tokens(text)
+    has_recent_cue = bool(_ANY_RECENT_RE.search(value))
     # 「半个月」「一个半月」先剥：_CN_TIME_RE 的数字部分抓不到「半」
     value = _CN_HALF_MONTH_RE.sub(" ", value)
     # 「7日水表」：日 = 天，不剥的话「7日」会被当成船名
@@ -278,6 +285,10 @@ def _ship_in_text(text: str) -> str:
     # 带字母或连字符的数字（U-190 / I-56 / S-189 / u4501）本来就保留
     if re.search(r"[^\d\s-]", value):
         value = re.sub(r"(?<![\w-])\d{1,4}(?![\w-])", " ", value)
+        # 「随机西西里30」「西西里随机30」：数字紧贴汉字，上面的零宽断言剥不到。
+        # 只在这种句子确实带时间线索时才剥，免得动到别的写法
+        if has_recent_cue:
+            value = re.sub(r"(?<=[\u4e00-\u9fff])\d{1,4}(?![\w-])", " ", value)
     value = re.sub(r"[^\w-]+", " ", value, flags=re.UNICODE)
     # 「AL 信浓」这种带空格的写法会被上游当成「服务器 昵称」参数，拼回去
     value = re.sub(r"(?<=[A-Za-z])\s+(?=[\u4e00-\u9fff])", "", value)
@@ -524,6 +535,8 @@ _TIME_WORDS = (
     "近一年", "十二个月", "六个月", "近半年", "半年", "一年",
     "近两个月", "两个月", "三个月", "一个月", "这个月", "上个月", "本月", "这周", "本周", "上周",
     "一周", "这礼拜", "这几天", "三天", "今天", "今日", "昨天", "昨日", "当天", "近几天",
+    # 「随机」= 随机战这一档，和近期同义，不能留成船名
+    "随机",
 )
 
 # 文本里的 @ 标记形如 @<昵称:QQ号>，判断关键词前先抹掉，免得昵称里带「战绩」误命中
@@ -572,6 +585,10 @@ _EXTRA_QUERY_CUES = (
     re.compile(r"(?<![A-Za-z])recent(?![A-Za-z])", re.IGNORECASE),
     # 「近期」不带数字也算：默认 1 天（见 _days_in_text）
     re.compile(r"近期"),
+    # 「随机」与近期同义，但裸「随机」不单独算触发：AI 工具里「随机抽船」
+    # 说的是 `wws_roll`，抢过来会把它当成船名查。只认带天数或跟着近期线索的写法。
+    re.compile(r"\d{1,3}\s*日?\s*随机"),
+    re.compile(r"(?:近期|最近|recent)\s*随机", re.IGNORECASE),
     re.compile(r"查\s*[我咱俺]"),
     # 「近188天4501」：近/最近 带明确时间单位才算。只认 天/周/个月，
     # 「最近30把西西里」是局数不是天数，别误触发
