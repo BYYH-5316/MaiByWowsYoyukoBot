@@ -49,6 +49,7 @@ TOOL_SWITCH_FIELDS: dict[str, str] = {
     "wws_recent_random": "enable_recent_random",
     "wws_recent_rank": "enable_recent_rank",
     "wws_ship_recent": "enable_ship_recent",
+    "wws_ship_rank": "enable_ship_rank",
     "wws_recent_battles": "enable_recent_battles",
     "wws_ships": "enable_ships",
     "wws_roll_ship": "enable_roll_ship",

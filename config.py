@@ -201,35 +201,40 @@ class LlmToolConfig(PluginConfigBase):
         description="查询指定单船的近期战绩",
         json_schema_extra={"label": "单船近期战绩", "order": 15},
     )
+    enable_ship_rank: bool = Field(
+        default=True,
+        description="查询单船服务器排行榜（全服榜单，不需要用户绑定账号）",
+        json_schema_extra={"label": "单船排行榜", "order": 16},
+    )
     enable_recent_battles: bool = Field(
         default=True,
         description="查询近期逐场战斗明细",
-        json_schema_extra={"label": "逐场明细", "order": 16},
+        json_schema_extra={"label": "逐场明细", "order": 17},
     )
     enable_ships: bool = Field(
         default=True,
         description="按等级/国家/舰种筛选战舰战绩列表",
-        json_schema_extra={"label": "筛选查询", "order": 17},
+        json_schema_extra={"label": "筛选查询", "order": 18},
     )
     enable_roll_ship: bool = Field(
         default=True,
         description="随机抽一条战舰（娱乐功能）",
-        json_schema_extra={"label": "随机抽船", "order": 18},
+        json_schema_extra={"label": "随机抽船", "order": 19},
     )
     enable_bind: bool = Field(
         default=True,
         description="绑定游戏账号",
-        json_schema_extra={"label": "绑定账号", "order": 19},
+        json_schema_extra={"label": "绑定账号", "order": 20},
     )
     enable_bind_list: bool = Field(
         default=True,
         description="查看已绑定的游戏账号",
-        json_schema_extra={"label": "查看绑定", "order": 20},
+        json_schema_extra={"label": "查看绑定", "order": 21},
     )
     enable_bind_change: bool = Field(
         default=True,
         description="切换当前使用的绑定账号",
-        json_schema_extra={"label": "切换绑定", "order": 21},
+        json_schema_extra={"label": "切换绑定", "order": 22},
     )
 
 

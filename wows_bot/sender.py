@@ -82,3 +82,21 @@ def mention_header(
     window = f"（{scope}）" if scope else ""
     who = "你自己的账号" if self_query else f"「{name}」绑定的账号"
     return f"{who}：{label} {account}{window}，水表来啦~"
+
+
+def rank_header(ship: str, server: str) -> str:
+    """单船排行榜发图前的说明：哪个服、哪条船的榜。
+
+    排行榜是全服数据，不属于某个玩家，所以这里不写「谁的账号」。
+    """
+    label = SERVER_LABELS.get(server, server) or server
+    return f"{label}「{ship}」的单船排行榜来啦~"
+
+
+def rank_server_hint(ship: str) -> str:
+    """排行榜按服务器分榜，没认出服务器时把五种写法一次摆出来。"""
+    return (
+        f"查「{ship}」的排行榜要先说清在哪个服哦~（排行榜是分服的）\n"
+        "国服 cn / 亚服 asia / 欧服 eu / 美服 na / 俄服 ru，"
+        f"比如 /查cn{ship}排行榜"
+    )

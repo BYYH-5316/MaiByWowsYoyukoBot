@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
@@ -29,6 +30,7 @@ __all__ = [
     "QueryResult",
     "build_account_command",
     "build_ship_command",
+    "build_ship_rank_command",
     "build_recent_command",
     "build_ships_command",
     "build_bind_command",
@@ -352,6 +354,27 @@ def build_ship_recent_command(
     parts = [*_identity_tokens(server, nickname), "ship", "recent", str(ship)]
     if days:
         parts.append(str(days))
+    return " ".join(parts)
+
+
+def build_ship_rank_command(ship: str, server: str | None = None) -> str:
+    """单船服务器排行榜：``rank <服务器> <船名>``（``ship rank …`` 是同一条指令）。
+
+    ▍为什么船名要并掉空格
+    hikari 的 ``_handle_ship_rank`` 要求服务器之后**恰好剩一个** token 当船名，
+    ``rank eu ARP YAMATO`` 会直接报参数错误；而百科搜索忽略空格
+    （实测 ``ARPYAMATO`` 与 ``ARP YAMATO`` 都命中 ARP Yamato），并掉就能查。
+
+    ▍为什么服务器不能省
+    排行榜按服务器分榜，接口 URL 里 ``/rank/yuyuko_ship/{server}`` 是必填段，
+    没有服务器 hikari 回「服务器名输入错误」。
+    """
+    name = re.sub(r"\s+", "", str(ship or ""))
+    parts = ["rank"]
+    if server:
+        parts.append(normalize_server(server) or str(server).strip())
+    if name:
+        parts.append(name)
     return " ".join(parts)
 
 
@@ -742,6 +765,8 @@ class QueryRunner:
             return ext.recents_summary(raw)
         if extractor == "ships":
             return ext.ships_summary(raw)
+        if extractor == "ship_rank":
+            return ext.ship_rank_summary(raw)
         if extractor == "roll":
             return ext.roll_summary(raw)
         if extractor == "bind":
@@ -782,6 +807,9 @@ _SHIP_NAME_KEYS = ("nameCn", "nameEnglish", "name", "shipName", "shipNameEn")
 # 前缀要求后面是空格或中文，避免把 Alabama 之类当成 AL 联动船。
 _VARIANT_PREFIXES = ("AL", "ARP", "HSF", "BA", "WK", "TM", "DMM", "IGN", "VII", "40K")
 _VARIANT_SUFFIXES = ("CLR", "TE", "AR", "BF", "LNY")
+
+# 换皮前缀对外的一份只读名单（插件的服务器识别要用：EUARP… / CNAL… 这种连写）
+VARIANT_SHIP_TAGS: tuple[str, ...] = _VARIANT_PREFIXES
 
 
 def _is_cjk(ch: str) -> bool:

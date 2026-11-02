@@ -474,6 +474,75 @@ class BattleStatsExtractor:
         summary["by_ship"] = [r for r in (cls._ship_row(i) for i in total) if r][:limit]
         return summary
 
+    @classmethod
+    def ship_rank_summary(cls, data: Any, limit: int = 10) -> dict[str, Any]:
+        """单船排行榜（ship rank）：船 + 榜单口径 + 前面几名。
+
+        上游形状（见 ``features/ship/rank.py`` 的 ``search_rank``）是
+        ``{data: {key: {total, minScore, avgScore, …}, value: [{sortIndex, userInfo, …}]},
+        shipInfo: {…}}``。
+
+        ▍为什么没有服务器
+        ``shipInfo.server`` 是这条船在**图鉴**里的服务器标记，跟用户查的榜不是一回事
+        （实测查国服榜、欧服榜它都返回 asia）。服务器由调用方的指令参数决定，这里不重复取。
+
+        ▍为什么不太信 ``data.key``
+        实测船榜接口把 ``key`` 里的 ``total`` / ``minScore`` / ``avgScore`` 等**全部留成
+        0 或 null**，只有 ``value`` 是真的（50 行）。所以榜单口径靠 ``listed``，
+        ``key`` 里有值才补上，避免把 0 当成「这个榜没人」讲给模型听。
+        """
+        ship = data.get("shipInfo") if isinstance(data, dict) else None
+        ship = ship if isinstance(ship, dict) else {}
+        payload = cls._dig(data, ("data",))
+        payload = payload if isinstance(payload, dict) else {}
+        key = payload.get("key") if isinstance(payload.get("key"), dict) else {}
+        rows = payload.get("value") if isinstance(payload.get("value"), list) else []
+
+        summary: dict[str, Any] = {"ship": cls._pick_loose(ship, ("nameCn", "nameEnglish")) or ""}
+        for name, field in (("level", "level"), ("ship_type", "shipType"), ("nation", "country")):
+            if ship.get(field):
+                summary[name] = ship[field]
+        if key.get("total"):
+            summary["rank_total"] = key["total"]
+        thresholds = {
+            label: cls._round(key[field])
+            for label, field in (
+                ("min", "minScore"),
+                ("median", "medianScore"),
+                ("avg", "avgScore"),
+                ("max", "maxScore"),
+            )
+            if key.get(field) is not None
+        }
+        if thresholds:
+            summary["damage_thresholds"] = thresholds
+
+        entries: list[dict[str, Any]] = []
+        for index, row in enumerate(rows, start=1):
+            if not isinstance(row, dict):
+                continue
+            info = row.get("userInfo") if isinstance(row.get("userInfo"), dict) else {}
+            clan = info.get("clanInfo") if isinstance(info.get("clanInfo"), dict) else {}
+            pr = row.get("pr") if isinstance(row.get("pr"), dict) else {}
+            entries.append(
+                {
+                    "rank": row.get("sortIndex") or index,
+                    "player": info.get("userName") or "",
+                    "clan": clan.get("tag") or "",
+                    "battles": row.get("battle"),
+                    "avg_damage": row.get("damage"),
+                    "max_damage": row.get("maxDamage"),
+                    # 模板按 ``{{ wins }}%`` 直接显示，上游给的就是百分数
+                    "win_rate": cls._round(row.get("wins"), 1),
+                    "avg_xp": row.get("xp"),
+                    "pr": pr.get("value") if pr.get("value") is not None else row.get("pr"),
+                    "pr_label": pr.get("name") or "",
+                }
+            )
+        summary["top"] = entries[:limit]
+        summary["listed"] = len(entries)
+        return summary
+
     @staticmethod
     def _as_list(data: Any, keys: Iterable[str]) -> list:
         """按候选键名取列表；取不到返回空列表（不同接口口径不一致时容错）。"""

@@ -312,6 +312,18 @@ class ToolExecutor:
         if len(text) > MAX_PAYLOAD_CHARS:
             text = text[:MAX_PAYLOAD_CHARS] + "…（数据过长已截断）"
 
+        if extractor == "ship_rank":
+            # 排行榜是全服别人的成绩，不是提问者的战绩：既不能引导「点评玩家表现」，
+            # 也不能让模型把这些数字说成「你的胜率」。
+            head = "以下是这条船在该服务器排行榜上的数据（JSON），请据此作答。"
+            head += (
+                "这是全服榜单，不是某个玩家的个人战绩，**不要点评水平**，"
+                "只挑排名、场次、伤害、PR 里的要点说。图片已经发给用户了，"
+                "不需要再把榜单罗列一遍；但回复里只要提到数字，就必须和上面的数据完全一致，"
+                "绝对不能凭空编造。\n\n"
+            )
+            return head + text
+
         head = "以下是用户要查询的战绩数据（JSON），请据此作答"
         if self._evaluate_enabled():
             head += "，并用自然的语气点评一下玩家的表现（水平、风格、亮点或不足）"

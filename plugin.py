@@ -15,11 +15,14 @@
 群聊 @（不需要 @ 机器人）：
 
 - `@某位群友 查水表` 直接查那位群友绑定账号的总表并发图；触发词可在配置里改
+- `/西西里recent30` 单独一条斜杠查询（简易查询）；带排行榜词时查的是这条船在该服的榜单，
+  如 `/查CN西西里排行榜`、`/EUARPYAMATORANK`（排行榜不需要任何人绑定账号）
 
 LLM 工具（`@Tool`，见文件后半段）：
 
-- 12 个 `wws_*` 工具，让用户在聊天里用自然语言查询战绩，AI 拿精简数据作答/点评，
-  图片仍按 `/wws` 的排版渲染发给用户。
+- 13 个 `wws_*` 工具，让用户在聊天里用自然语言查询战绩，AI 拿精简数据作答/点评，
+  图片仍按 `/wws` 的排版渲染发给用户。`wws_ship_rank`（单船排行榜）是个例外：
+  榜上是全服别人的成绩，跟提问者无关，所以**不注入身份、也不引导点评**。
 
 渲染与数据都在 `hikari_core`（随插件分发）；本文件只做组件适配与生命周期管理。
 """
@@ -52,6 +55,8 @@ from .wows_bot import (
     account_not_found_hint,
     mention_header,
     missing_token_hint,
+    rank_header,
+    rank_server_hint,
     reply_text,
 )
 from .wows_bot.log import logger
@@ -61,12 +66,14 @@ from .yuyuko_llm import (
     ToolContext,
     ToolExecutor,
     ToolGuard,
+    VARIANT_SHIP_TAGS,
     build_account_command,
     build_bind_command,
     build_literal_command,
     build_recent_command,
     build_roll_command,
     build_ship_command,
+    build_ship_rank_command,
     build_ship_recent_command,
     build_ships_command,
     classify_error,
@@ -212,6 +219,88 @@ _FOREIGN_BOT_NAME_RE = re.compile(r"yuyuko|kokomi|助手|bot|robot|机器人", r
 _SHIP_CONJUNCTION_RE = re.compile(
     r"[、,，/]|(?<=\w)[和与及或](?=\w)|(?<=\s)[和与及或](?=\s)", re.UNICODE
 )
+
+
+# 「wws ship rank cn 西西里」是上游正经的单船服务器排行榜指令。玩家想直接说人话：
+# 「/查CN西西里排行榜」「/EUARPYAMATORANK」。排行榜**按服务器分榜**，所以除了线索词，
+# 还得从原文里认出服务器；认不出服务器就如实问一句，不拿某个服猜。
+
+# 排行榜线索词。rank 不做字母边界：`EUARPYAMATORANK` 这种整串连写的尾巴就是 rank，
+# 加了 (?<![A-Za-z]) 反而认不出来；船名里没有带 rank 的，不会误伤。
+_RANK_CUE_RE = re.compile(r"排行榜|排行|rank", re.IGNORECASE)
+
+# 服务器说法 → hikari 认的服务器代码（与 core/constants.py 的 servers 关键字一致）。
+# 长词在前，同一位置上「asia」不能抢掉「asian」。
+_RANK_SERVER_ALIASES: tuple[tuple[str, str], ...] = (
+    ("northamerican", "na"),
+    ("russia", "ru"),
+    ("europe", "eu"),
+    ("china", "cn"),
+    ("asian", "asia"),
+    ("asia", "asia"),
+    ("国服", "cn"),
+    ("亚服", "asia"),
+    ("欧服", "eu"),
+    ("美服", "na"),
+    ("俄服", "ru"),
+    ("cn", "cn"),
+    ("eu", "eu"),
+    ("na", "na"),
+    ("ru", "ru"),
+)
+_VARIANT_TAG_RE = re.compile(
+    "(?:" + "|".join(sorted(VARIANT_SHIP_TAGS, key=len, reverse=True)) + ")", re.IGNORECASE
+)
+
+
+def _is_ascii_letter(char: str) -> bool:
+    return bool(char) and char.isascii() and char.isalpha()
+
+
+def _pop_server_alias(text: str) -> tuple[str, str]:
+    """从原文里认出服务器，返回 ``(服务器代码, 去掉服务器说法后的文本)``；认不出返回 ``("", 原文)``。
+
+    ▍为什么要卡边界
+    「/NAGATO排行榜」里的 NA 是船名的一部分，当服务器就查错榜、还剩下个 GATO。
+    所以 ASCII 别名要求前面不是英文字母，而且后面 either 不是英文字母（``CN西西里``、
+    ``EU 大和``）或者直接接换皮船前缀（``EUARP…`` / ``CNAL…`` / ``ASIAARP…``
+    这三种整串连写就是这么认的）。中文别名（国服 / 亚服）不存在这种歧义，照常匹配。
+    """
+    lowered = text.lower()
+    best: tuple[tuple[int, int], int, str, str] | None = None
+    for alias, code in _RANK_SERVER_ALIASES:
+        start = 0
+        while True:
+            index = lowered.find(alias, start)
+            if index < 0:
+                break
+            start = index + 1
+            end = index + len(alias)
+            before = text[index - 1] if index else ""
+            after = text[end] if end < len(text) else ""
+            if _is_ascii_letter(before):
+                continue
+            if _is_ascii_letter(after) and not _VARIANT_TAG_RE.match(text, end):
+                continue
+            rank = (index, -len(alias))
+            if best is None or rank < best[0]:
+                best = (rank, index, end, code)
+    if best is None:
+        return "", text
+    _, index, end, code = best
+    return code, f"{text[:index]} {text[end:]}".strip()
+
+
+def _rank_split(text: str) -> tuple[str, str] | None:
+    """认出「排行榜」写法：返回 ``(服务器代码, 剩下的船名候选文本)``。
+
+    原话里没有排行榜线索返回 ``None``，调用方照常按水表查询解析。
+    """
+    value = _strip_at_tokens(text or "")
+    if not value or not _RANK_CUE_RE.search(value):
+        return None
+    server, body = _pop_server_alias(_RANK_CUE_RE.sub(" ", value))
+    return server, re.sub(r"\s+", " ", body).strip()
 
 
 def _cn_to_int(value: str) -> int | None:
@@ -382,6 +471,11 @@ def _looks_like_query(text: str) -> bool:
     # 先按「单独一条 /查询」整段判断：`/recent 怎么用` 这种虽然带 recent，也是在问用法
     payload = _simple_query_payload(text)
     if payload:
+        # `/ASIAARP大和RANK` 这类排行榜写法没有「水表 / 战绩」字样，
+        # 走下面的口径会被判成「不像查询」，AI 侧的意图闸门会直接拦掉工具调用。
+        rank = _rank_split(payload)
+        if rank is not None and rank[1] and _simple_payload_ok(rank[1]):
+            return True
         return _simple_payload_kind(payload, _ship_in_text(payload)) is not None
     if _QUERY_HINT_RE.search(clean):
         return True
@@ -611,7 +705,8 @@ def _strip_at_tokens(text: str) -> str:
 _DEFAULT_MENTION_KEYWORDS = ("水表", "战绩", "查一下", "查查", "查询")
 
 # 一条消息算不算「战绩查询」：用来记下最近的查询发送者（见 _PENDING_QUERY_TTL）
-_QUERY_HINT_RE = re.compile(r"水表|战绩|场均|胜率|recent|wws", re.I)
+# 排行榜也算查询：AI 工具的意图门禁（_query_intent_gate）靠它放行「查CN西西里排行榜」。
+_QUERY_HINT_RE = re.compile(r"水表|战绩|场均|胜率|recent|wws|排行|rank", re.I)
 
 # 明显是聊天、不是查询的词。用来把「/recent 怎么用」「我今天打了一局」
 # 「最近手感不好」这类句子挡在查询之外——只靠剥词是剥不干净的。
@@ -1800,16 +1895,30 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         head = payload.split()[0].casefold()
         if head in _SIMPLE_BLOCK_HEADS or head in self._wake_aliases():
             return None
-        days = _days_in_text(payload)
-        # 机器人自己的名字不能当船名（`/睦子米水表` 里的「睦子米」不是船）
-        ship = _ship_in_text(self._strip_bot_names(payload))
-        kind = _simple_payload_kind(payload, ship)
-        if kind is None:
-            return None
-        if kind in ("recent", "account"):
-            ship = ""
-        if kind in ("ship", "account"):
-            days = None
+
+        server = ""
+        rank = _rank_split(payload)
+        if rank is not None:
+            # 「/查CN西西里排行榜」「/EUARPYAMATORANK」：排行榜查的是全服榜单，
+            # 不需要谁绑定过账号，所以单独一条口径，不跟水表查询共用解析结果。
+            server, rest = rank
+            if not rest or not _simple_payload_ok(rest):
+                return None
+            ship = _ship_in_text(self._strip_bot_names(rest))
+            if not ship or _SHIP_CONJUNCTION_RE.search(ship):
+                return None
+            kind, days = "ship_rank", None
+        else:
+            days = _days_in_text(payload)
+            # 机器人自己的名字不能当船名（`/睦子米水表` 里的「睦子米」不是船）
+            ship = _ship_in_text(self._strip_bot_names(payload))
+            kind = _simple_payload_kind(payload, ship)
+            if kind is None:
+                return None
+            if kind in ("recent", "account"):
+                ship = ""
+            if kind in ("ship", "account"):
+                days = None
         group_id = self._group_id_of(message)
 
         targets = self._at_targets(message)
@@ -1836,6 +1945,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             "kind": kind,
             "ship": ship,
             "days": days,
+            "server": server,
             # 严格触发：只要抠出了船名，就先拿上游百科校验这个船名真的存在。
             # 离线分不出 `/西西里` 和 `/今日摸鱼`、`/哈哈`，带时间的也可能是随手发个
             # 斜杠词（群里 `@某人 /今日摸鱼` 实测被当成「猪猪 · 最近 1 天」去查），
@@ -1860,8 +1970,8 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         logger.info(
             f"[wows] 简易查询触发: group={group_id or '-'} target={plan['target_id']} "
             f"name={plan['target_name']!r} 类型={plan['kind']} 船={plan['ship']!r} "
-            f"天数={plan['days']} 自查={plan['self_query']} 校验船名={bool(plan.get('verify_ship'))} "
-            f"原文={trigger_text[:80]!r}"
+            f"天数={plan['days']} 服务器={plan.get('server') or '-'} 自查={plan['self_query']} "
+            f"校验船名={bool(plan.get('verify_ship'))} 原文={trigger_text[:80]!r}"
         )
         self._spawn_mention_query(
             stream_id=stream_id,
@@ -1872,6 +1982,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             kind=str(plan["kind"]),
             ship=str(plan["ship"]),
             days=plan["days"],
+            server=str(plan.get("server") or ""),
             self_query=bool(plan["self_query"]),
             verify_ship=bool(plan.get("verify_ship")),
         )
@@ -2161,6 +2272,7 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         kind: str = "account",
         ship: str = "",
         days: int | None = None,
+        server: str = "",
         self_query: bool = False,
         verify_ship: bool = False,
     ) -> None:
@@ -2170,6 +2282,18 @@ class WowsYuyukoPlugin(MaiBotPlugin):
                 # 「/哈哈」这种随手发一个斜杠词的：消息已经被 abort 了，
                 # 这里再回一句「没找到这艘船」纯属噪音，直接静默丢掉。
                 logger.info(f"[wows] 简易查询跳过：{ship!r} 不是上游已知的船名")
+                return
+            if kind == "ship_rank":
+                # 排行榜查的是全服榜单，跟「这个人绑没绑账号」没关系，
+                # 所以走这条独立分支，不进下面的绑定门禁。
+                await self._run_rank_query(
+                    stream_id=stream_id,
+                    group_id=group_id,
+                    bot_id=bot_id,
+                    target_id=target_id,
+                    ship=ship,
+                    server=server,
+                )
                 return
             # 绑定关系每次现查：5 分钟缓存会让「刚绑定的人」被判成未绑定，
             # 换了默认账号时说明里的名字也会停在旧号上。这条路径本来就只在 @ 时跑一次。
@@ -2241,6 +2365,47 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         except Exception as e:  # noqa: BLE001
             logger.warning(f"[wows] @ 查询失败 target={target_id}: {e!r}")
             await reply_text(self.ctx, stream_id, user_error_text(classify_error(e)))
+
+    async def _run_rank_query(
+        self,
+        *,
+        stream_id: str,
+        group_id: str,
+        bot_id: str,
+        target_id: str,
+        ship: str,
+        server: str,
+    ) -> None:
+        """单船服务器排行榜（简易查询）。
+
+        ▍为什么不复用 ``_run_mention_command``
+        那条路径查「这个号打得怎么样」，靠 me 模式按绑定取数；排行榜查的是
+        「这条船在某个服谁打得最好」，参数只有服务器 + 船名，和发送者是谁无关，
+        所以也不该被「TA 还没绑定」拦住。
+        """
+        if not server:
+            await reply_text(self.ctx, stream_id, rank_server_hint(ship))
+            return
+
+        async def raw_call():
+            return await init_hikari(
+                command_text=build_ship_rank_command(ship, server),
+                platform=PLATFORM,
+                PlatformId=target_id,
+                BotId=bot_id,
+                GroupId=group_id,
+            )
+
+        async with self.runtime.render_lock:
+            hikari = await self._settle_ship_choice(
+                await raw_call(), ship, stream_id, rerun=raw_call
+            )
+            logger.info(
+                f"[wows] 单船排行榜 船={ship!r} 服务器={server} status={hikari.Status}"
+            )
+            if hikari.Status == "success":
+                await reply_text(self.ctx, stream_id, rank_header(ship, server))
+            await self._send_result(stream_id, hikari)
 
     async def _run_mention_command(
         self,
@@ -2579,7 +2744,9 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             logger.info(f"[wows] 天数按消息原文纠正: 模型={days} 原文={parsed} 消息={text[:40]!r}")
         return parsed or _clamp_days(days)
 
-    def _resolve_ship(self, ship: str, kwargs: dict[str, Any]) -> str:
+    def _resolve_ship(
+        self, ship: str, kwargs: dict[str, Any], alt_text: str | None = None
+    ) -> str:
         """船名口径：原话里带了换皮标记（AL信浓 / 北卡CLR）就按原话。
 
         ▍为什么盖过模型的 ship
@@ -2587,13 +2754,19 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         ``ship="信浓"``，前缀被吃掉，查到的是普通信浓（yuyuko 对「信浓」返回
         AL信浓 / 信浓 两个候选）。工具拿不到触发消息，只能借 Hook 记下的原文补回来；
         只在「模型给的船名包含于原话船名」时才纠正，避免把闲聊词当船名。
+
+        ▍``alt_text``
+        已经按业务口径清洗过的原文（排行榜要把「排行榜 / 国服」剥掉再认船名，
+        否则「国服西西里排行榜」整串会被当成船名）。传 ``None`` 时自己回查原话。
         """
         model_ship = (ship or "").strip()
-        try:
-            ctx = self._tool_ctx(kwargs)
-            text = self._recent_text(ctx.stream_id, ctx.group_id, ctx.user_id)
-        except Exception:  # noqa: BLE001
-            return model_ship
+        if alt_text is None:
+            try:
+                ctx = self._tool_ctx(kwargs)
+                alt_text = self._recent_text(ctx.stream_id, ctx.group_id, ctx.user_id)
+            except Exception:  # noqa: BLE001
+                return model_ship
+        text = alt_text
         parsed = _ship_in_text(text) if text else ""
         if not parsed or re.search(r"[和与及、,，]", parsed):
             return model_ship
@@ -3045,6 +3218,68 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         # 拿一年里的旧场次顶上来会让人误以为是最近打的（用户明确要求不放宽）。
         # 注意 `_run_tool` 永远返回 success=True（业务失败也走 content）。
         return self._with_window(payload, days)
+
+    @Tool(
+        "wws_ship_rank",
+        brief_description=(
+            "单船服务器排行榜（这条船在全服谁打得最好）；句子里有「排行榜 / 排行 / rank」且点了船名就用它；"
+            "查某个玩家自己的战绩不要用，server 必须给"
+        ),
+        detailed_description=(
+            "查询某条战舰在指定服务器上的玩家排行榜：排名、场次、场均伤害、最高伤害、胜率、PR。"
+            "榜上的是**全服玩家**，不是当前用户自己的战绩，也**不需要用户绑定账号**。"
+            "用户说「CN西西里排行榜」「EU 大和 rank」「亚服 AL信浓 排行」「这条船谁打得最狠」时调用。"
+            "⚠ 排行榜是分服务器开的，server 一定要给：国服 cn / 亚服 asia / 欧服 eu / 美服 na / 俄服 ru；"
+            "用户没说在哪个服，就先问一句是哪个服，不要替用户猜一个。"
+            "ship 照抄用户原话，中英文均可，换皮标记（AL / ARP / BA…）一个都不能漏。"
+            "用户写的是连写也不要拆开（ARPYAMATO 这种上游能认）。"
+            "命中多条船时返回带序号的候选列表，让用户选，再带 select_index 重新调用。"
+            "拿到数据只播要点（榜首是谁、多少伤害、上榜门槛），**不要点评玩家水平**，"
+            "那不是一个玩家的个人成绩。"
+        ),
+        parameters=[
+            _p_ship(required=True),
+            _p_server(
+                description=(
+                    "排行榜所在服务器，必填：国服 cn / 亚服 asia / 欧服 eu / 美服 na / 俄服 ru。"
+                    "用户没提到服务器就留空，工具会提示你问用户"
+                )
+            ),
+            _p_select(),
+        ],
+        core_tool=True,
+    )
+    async def tool_wws_ship_rank(
+        self,
+        ship: str = "",
+        server: str = "",
+        select_index: int | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        raw_text = self._tool_text(kwargs)
+        # 原话先按排行榜口径剥一遍（去掉「排行榜 / rank」与服务器码），否则
+        # 「国服西西里排行榜」整串会被当成船名回灌给工具（实测 @机器人 那条就这样）
+        rank = _rank_split(raw_text)
+        if select_index is None:
+            ship = self._resolve_ship(
+                ship, kwargs, alt_text=self._strip_bot_names(rank[1]) if rank else None
+            )
+        if not ship:
+            return {"success": True, "content": "查排行榜要先知道是哪条船，请让用户给出船名。"}
+        if not server:
+            # 模型常把原话里的服务器漏掉（用户写的是「/查CN西西里排行榜」）：
+            # 回查一次原文，认得出就直接查，认不出才让用户补服务器。
+            server = rank[0] if rank else _pop_server_alias(_strip_at_tokens(raw_text))[0]
+        if not server:
+            return {"success": True, "content": rank_server_hint(ship)}
+        return await self._run_tool(
+            kwargs,
+            build_ship_rank_command(ship, server),
+            "ship_rank",
+            "wws_ship_rank",
+            prefer_exact=ship,
+            select_index=select_index,
+        )
 
     @Tool(
         "wws_recent_battles",
