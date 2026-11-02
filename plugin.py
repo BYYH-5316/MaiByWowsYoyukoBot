@@ -211,12 +211,10 @@ _SIMPLE_BLOCK_HEADS = {
 # 群里那条消息本来就是在跟官方 bot 说话，我们插一脚会莫名其妙多出一张水表。
 # 判定用 @ 列表里的显示名，机器人自己的名字池（宿主配置 + 群里学到的名片）另外排除。
 _FOREIGN_BOT_NAME_RE = re.compile(r"yuyuko|kokomi|助手|bot|robot|机器人", re.IGNORECASE)
-# 船名里出现连词就说明这条消息点了不止一艘船，简易查询不接（交回正常路径）。
-# 「和」前后都还得有字才算连词：``/大和``、``/ARP大和`` 这种船名本身就带「和」，
-# 一律当连词会把它们整条拒掉（实测 `/大和` 查不了）
-_SHIP_CONJUNCTION_RE = re.compile(
-    r"[、,，/]|(?<=\w)[和与及或](?=\w)|(?<=\s)[和与及或](?=\s)", re.UNICODE
-)
+# 船名里带「和/与/及/或」「大和魁」这种连写，一律**原样交给上游百科判定**，
+# 不在这里拆词。水表和排行榜每次只查一艘船，点了两艘船（`/西西里和蒙大拿`）
+# 上游本来就查不到，整条会静默忽略；反过来在这里当连词拆开反而会误伤真船名——
+# `/大和`、`/ARP大和`、`/大和魁`、`/共和国` 全都被判成「说了两艘船」而拒掉。
 
 
 # 「wws ship rank cn 西西里」是上游正经的单船服务器排行榜指令。玩家想直接说人话：
@@ -514,7 +512,7 @@ def _simple_payload_kind(payload: str, ship: str) -> str | None:
     if not _simple_payload_ok(payload):
         return None
     days = _days_in_text(payload)
-    has_ship = bool(ship) and not _SHIP_CONJUNCTION_RE.search(ship)
+    has_ship = bool(ship)
     if days:
         return "ship_recent" if has_ship else "recent"
     if _query_cue_only(payload):
@@ -1913,7 +1911,9 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             if not rest or not _simple_payload_ok(rest):
                 return None
             ship = _ship_in_text(self._strip_bot_names(rest))
-            if not ship or _SHIP_CONJUNCTION_RE.search(ship):
+            if not ship:
+                # 是不是船交给上游百科判：`/查国服大和魁排行` 的「大和魁」、
+                # `/西西里和蒙大拿排行榜` 这种连写都在这一步之后才见分晓
                 return None
             kind, days = "ship_rank", None
         else:
