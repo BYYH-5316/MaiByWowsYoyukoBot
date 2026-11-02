@@ -2573,19 +2573,36 @@ class WowsYuyukoPlugin(MaiBotPlugin):
 
     @staticmethod
     def _pick_candidate(candidates: list, ship: str) -> int | None:
-        """候选里挑一个：名字完全一致优先，只有一个候选就直接选，否则返回 None 让用户挑。"""
+        """候选里挑一个：名字完全一致优先，只有一个候选就直接选，否则返回 None 让用户挑。
+
+        ▍为什么同名多条要比 groupType
+        换皮船会和常规船**中文名、英文名都一模一样**，只有 `groupType` 不同：
+        施里芬在百科里是 coopOnly(3330225968) + upgradeable(4074714928) 两条，
+        coop 那条按上游分类就没有玩家数据（实测 cn/ru/na/eu 排行榜全是 0 人），
+        而它在列表里排第一，只比名字必然选中它——排行榜于是出一张空榜。
+        `demo*` 同理（演示船没有战绩）。全库 level 1-10 共 1030 条，中文同名不同船的只有
+        施里芬和弗赖海特两组，两组都中过这条（按船名搜时弗赖海特的演示船也排在第一）。
+        """
         if not candidates:
             return None
         wanted = (ship or "").strip().lower()
+        first_match = None
         for index, item in enumerate(candidates, 1):
-            if not isinstance(item, dict):
+            if not isinstance(item, dict) or not wanted:
                 continue
             names = (
                 str(item.get("nameCn") or "").strip().lower(),
                 str(item.get("nameEnglish") or "").strip().lower(),
             )
-            if wanted and wanted in names:
+            if wanted not in names:
+                continue
+            group_type = str(item.get("groupType") or "")
+            if group_type != "coopOnly" and not group_type.startswith("demo"):
                 return index
+            if first_match is None:
+                first_match = index
+        if first_match is not None:
+            return first_match
         if len(candidates) == 1:
             return 1
         return None
