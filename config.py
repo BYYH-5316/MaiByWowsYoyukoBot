@@ -203,7 +203,10 @@ class LlmToolConfig(PluginConfigBase):
     )
     enable_ship_rank: bool = Field(
         default=True,
-        description="查询单船服务器排行榜（全服榜单，不需要用户绑定账号）",
+        description=(
+            "查询单船服务器排行榜（全服榜单，不需要用户绑定账号）；"
+            "关掉后简易查询里的「/查CN西西里排行榜」这类写法也不再响应"
+        ),
         json_schema_extra={"label": "单船排行榜", "order": 16},
     )
     enable_recent_battles: bool = Field(

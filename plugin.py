@@ -1807,6 +1807,17 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         cfg = getattr(self.config, "trigger", None)
         return _parse_wake_aliases(str(getattr(cfg, "command_aliases", "wws") or "wws"))
 
+    def _rank_enabled(self) -> bool:
+        """单船排行榜开关。
+
+        ▍为什么一个开关管两条路
+        排行榜在 AI 侧由 ``ToolGuard.tool_enabled("wws_ship_rank")`` 把关（同一个字段），
+        简易查询这条确定性路径不经过那个把关点，所以在这里读同一个字段自己判一次：
+        关掉之后「/查CN西西里排行榜」既不查榜、也不去水表口径里凑热闹。
+        """
+        cfg = getattr(self.config, "llm_tool", None)
+        return bool(getattr(cfg, "enable_ship_rank", True))
+
     def _is_foreign_bot_name(self, name: str) -> bool:
         """这个显示名是不是别的机器人（官方水表 bot）；机器人自己的名字池不算。"""
         display = str(name or "").strip().casefold()
@@ -1898,6 +1909,10 @@ class WowsYuyukoPlugin(MaiBotPlugin):
 
         server = ""
         rank = _rank_split(payload)
+        if rank is not None and not self._rank_enabled():
+            # 排行榜开关关掉时这条消息整条不接。落到下面的水表口径也没意义：
+            # 「国服西西里排行榜」会被当成船名去校验，既不出图又白白吃掉这条消息。
+            return None
         if rank is not None:
             # 「/查CN西西里排行榜」「/EUARPYAMATORANK」：排行榜查的是全服榜单，
             # 不需要谁绑定过账号，所以单独一条口径，不跟水表查询共用解析结果。
@@ -3257,6 +3272,11 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         **kwargs: Any,
     ) -> dict[str, Any]:
         raw_text = self._tool_text(kwargs)
+        if not self._rank_enabled():
+            return {
+                "success": True,
+                "content": "单船排行榜功能已被机器人管理员关闭，请告知用户该功能暂不可用。",
+            }
         # 原话先按排行榜口径剥一遍（去掉「排行榜 / rank」与服务器码），否则
         # 「国服西西里排行榜」整串会被当成船名回灌给工具（实测 @机器人 那条就这样）
         rank = _rank_split(raw_text)
