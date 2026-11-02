@@ -158,6 +158,35 @@ _CN_HALF_MONTH_RE = re.compile(
 # 把它当 7 天会把船名剥成「九月」（用户实测这条船在）。
 _NUM_DAY_RE = re.compile(r"(?<![A-Za-z\d-])(\d{1,3})\s*日")
 
+# 「BA蒙大拿30」「西西里36」：船名后面直接挂 1~3 位数字，不写 recent / 天 / 日。
+# 数字必须紧贴汉字才算天数，所以 `U-190`、`I-56`、`AL信浓`、`4501` 都不受影响。
+_TRAILING_DAYS_RE = re.compile(r"(?<=[\u4e00-\u9fff])\s*(\d{1,3})\s*$")
+
+
+def _trailing_days(text: str) -> tuple[str, int] | None:
+    """把「船名 + 裸数字」拆成 ``(船名, 天数)``；不像就返回 None。
+
+    ▍为什么要拆
+    ``/BA蒙大拿30`` 以前整串当船名，上游查不到「BA蒙大拿30」，简易查询就静默不响应；
+    玩家口语里这个数字就是天数。
+    ▍为什么要留下至少两个字的名字
+    「我30」「近30」剥完只剩一个字符，那种是聊天或时间说法，拆成船名反而会误查。
+    """
+    match = _TRAILING_DAYS_RE.search(text or "")
+    if not match:
+        return None
+    days = _clamp_days(int(match.group(1)))
+    if not days:
+        return None
+    name = (text or "")[: match.start()]
+    for word in _MENTION_NOISE_WORDS:
+        name = name.replace(word, " ")
+    name = re.sub(r"\s+", "", name)
+    if len(name) < 2:
+        return None
+    return name, days
+
+
 # 「近期无比战绩30」「最近 大和 30」：天数写在船名后面，没紧贴 recent/近期。
 # 只在句子里确实有 recent/近期/最近 时才把独立数字当天数；
 # 「最近30把」「连输5场」这类局数由后面的负向断言排除。
@@ -177,8 +206,12 @@ _SIMPLE_BLOCK_HEADS = {
 # 群里那条消息本来就是在跟官方 bot 说话，我们插一脚会莫名其妙多出一张水表。
 # 判定用 @ 列表里的显示名，机器人自己的名字池（宿主配置 + 群里学到的名片）另外排除。
 _FOREIGN_BOT_NAME_RE = re.compile(r"yuyuko|kokomi|助手|bot|robot|机器人", re.IGNORECASE)
-# 船名里出现连词就说明这条消息点了不止一艘船，简易查询不接（交回正常路径）
-_SHIP_CONJUNCTION_RE = re.compile(r"[和与及或、,，/]")
+# 船名里出现连词就说明这条消息点了不止一艘船，简易查询不接（交回正常路径）。
+# 「和」前后都还得有字才算连词：``/大和``、``/ARP大和`` 这种船名本身就带「和」，
+# 一律当连词会把它们整条拒掉（实测 `/大和` 查不了）
+_SHIP_CONJUNCTION_RE = re.compile(
+    r"[、,，/]|(?<=\w)[和与及或](?=\w)|(?<=\s)[和与及或](?=\s)", re.UNICODE
+)
 
 
 def _cn_to_int(value: str) -> int | None:
@@ -237,6 +270,10 @@ def _days_in_text(text: str) -> int | None:
     for words, days in _TIME_WORD_DAYS:
         if any(word in clean for word in words):
             return days
+    # 「BA蒙大拿30」「西西里36」：数字紧贴船名、没有任何时间词，也是天数
+    trailing = _trailing_days(clean)
+    if trailing:
+        return trailing[1]
     # 「西西里recent」「西西里近期」：只有 cue、没写数字，就是今天（1 天）。
     # 以前它被当噪音词剥掉，船名留下、天数是 None，整条消息退化成生涯总表。
     # 夹着聊天词（「最近手感不好」）就不认，免得把闲聊当时间。
@@ -289,7 +326,13 @@ def _ship_in_text(text: str) -> str:
         # 只在这种句子确实带时间线索时才剥，免得动到别的写法
         if has_recent_cue:
             value = re.sub(r"(?<=[\u4e00-\u9fff])\d{1,4}(?![\w-])", " ", value)
-    value = re.sub(r"[^\w-]+", " ", value, flags=re.UNICODE)
+    value = re.sub(r"[^\w·-]+", " ", value, flags=re.UNICODE)
+    # 「大和·魁」「乔治·克莱蒙梭」：中点是船名的一部分，不能让它两边的空格把名字切开
+    value = re.sub(r"\s*·\s*", "·", value)
+    # 「BA蒙大拿30」「西西里 36」：尾巴上的数字是天数，不是船名的一部分
+    trailing = _trailing_days(value)
+    if trailing:
+        value = trailing[0]
     # 「AL 信浓」这种带空格的写法会被上游当成「服务器 昵称」参数，拼回去
     value = re.sub(r"(?<=[A-Za-z])\s+(?=[\u4e00-\u9fff])", "", value)
     value = re.sub(r"\s+", " ", value).strip(" -")
@@ -321,6 +364,11 @@ def _query_residue_empty(text: str) -> bool:
     rest = rest.replace("的", " ")
     if ship:
         rest = rest.replace(ship, " ")
+        # 「AL 信浓」「BA 蒙大拿 30」：_ship_in_text 把字母和汉字之间的空格拼掉了，
+        # 上面的整串替换就匹配不到原话里的写法，剩下的字母会被当成聊天内容
+        letters = re.sub(r"\s+", "", ship)
+        if letters:
+            rest = re.sub(r"\s*".join(re.escape(ch) for ch in letters), " ", rest)
     rest = re.sub(r"(?<![\w-])\d{1,4}(?![\w-])", " ", rest)
     rest = re.sub(r"[\s\W_]+", "", rest, flags=re.UNICODE)
     return not rest
@@ -567,9 +615,11 @@ _QUERY_HINT_RE = re.compile(r"水表|战绩|场均|胜率|recent|wws", re.I)
 
 # 明显是聊天、不是查询的词。用来把「/recent 怎么用」「我今天打了一局」
 # 「最近手感不好」这类句子挡在查询之外——只靠剥词是剥不干净的。
+# 「抽」是娱乐功能的说法（随机抽船 / 抽卡），不能因为「随机」也算时间线索
+# 就把「随机抽船」当成一次查战绩。
 _QUERY_NOISE_RE = re.compile(
     r"怎么|如何|为什么|什么|吗|呢|吧|啊|呀|的|了|是|在|用|说|问|看|帮|给|替|"
-    r"觉得|感觉|手感|打|玩|局|把|求|教|试"
+    r"觉得|感觉|手感|打|玩|局|把|求|教|试|抽"
 )
 _SIMPLE_PAYLOAD_MAX = 24
 
