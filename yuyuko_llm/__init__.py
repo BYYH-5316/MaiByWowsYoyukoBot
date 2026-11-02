@@ -29,26 +29,20 @@ from .guide import (
     user_error_text,
 )
 from .query import (
-    COMMAND_BUILDERS,
     QueryResult,
     QueryRunner,
     VARIANT_SHIP_TAGS,
     build_account_command,
-    build_bind_command,
-    build_literal_command,
     build_recent_command,
-    build_roll_command,
     build_ship_command,
     build_ship_rank_command,
     build_ship_recent_command,
-    build_ships_command,
     resolve_account_id,
     resolve_identity,
     resolve_ship_name,
     ship_name_exists,
 )
 from .tool_spec import (
-    BIND_GUIDE,
     EXCEPTION_GUIDE,
     FEEDBACK_CONTACT,
     IMAGE_FAILED_GUIDE,
@@ -59,9 +53,7 @@ from .tool_spec import (
 )
 
 __all__ = [
-    "BIND_GUIDE",
     "BattleStatsExtractor",
-    "COMMAND_BUILDERS",
     "ERROR_EXCEPTION",
     "ERROR_NETWORK",
     "EXCEPTION_GUIDE",
@@ -78,14 +70,10 @@ __all__ = [
     "USER_EXCEPTION_TEXT",
     "USER_NETWORK_TEXT",
     "build_account_command",
-    "build_bind_command",
-    "build_literal_command",
     "build_recent_command",
-    "build_roll_command",
     "build_ship_command",
     "build_ship_recent_command",
     "build_ship_rank_command",
-    "build_ships_command",
     "classify_error",
     "config_get_bool",
     "humanize_error",

@@ -30,12 +30,11 @@ __all__ = [
     "QueryResult",
     "build_account_command",
     "build_ship_command",
+    "build_ship_recent_command",
     "build_ship_rank_command",
     "build_recent_command",
-    "build_ships_command",
-    "build_bind_command",
-    "build_roll_command",
     "resolve_account_id",
+    "resolve_identity",
 ]
 
 
@@ -324,15 +323,9 @@ def build_recent_command(
     days: int | None = None,
     server: str | None = None,
     nickname: str | None = None,
-    mode: str = "recent",
 ) -> str:
-    """查近期战绩。
-
-    Args:
-        mode: hikari 的指令词 —— ``recent``（随机+排位）/ ``recent_random``（仅随机）
-            / ``recent_rank``（仅排位）。
-    """
-    parts = [*_identity_tokens(server, nickname), mode]
+    """查近期战绩（全部模式）：``[服务器] [昵称] recent [天数]``。"""
+    parts = [*_identity_tokens(server, nickname), "recent"]
     if days:
         parts.append(str(days))
     return " ".join(parts)
@@ -376,77 +369,6 @@ def build_ship_rank_command(ship: str, server: str | None = None) -> str:
     if name:
         parts.append(name)
     return " ".join(parts)
-
-
-def build_ships_command(
-    min_level: int | None = None,
-    max_level: int | None = None,
-    nation: str | None = None,
-    ship_type: str | None = None,
-    server: str | None = None,
-    nickname: str | None = None,
-) -> str:
-    """筛选查询：``ships <国家> <类型> min N max M``（顺序不限，缺省项不拼）。"""
-    parts = [*(_identity_tokens(server, nickname)), "ships"]
-    if nation:
-        parts.append(str(nation))
-    if ship_type:
-        parts.append(str(ship_type))
-    if min_level is not None:
-        parts += ["min", str(min_level)]
-    if max_level is not None:
-        parts += ["max", str(max_level)]
-    return " ".join(parts)
-
-
-def build_bind_command(server: str, nickname: str) -> str:
-    """绑定账号：``bind <服务器> <昵称>``（两个都必填，否则 hikari 会报参数错误）。
-
-    昵称带空格要整体加半角括号：hikari 对 bind 只取第一个 token 当昵称，
-    ``bind cn John Doe`` 会安静地绑成 ``John``。
-    """
-    name = str(nickname)
-    if any(ch.isspace() for ch in name) and not (name.startswith("(") and name.endswith(")")):
-        name = f"({name})"
-    return " ".join(["bind", normalize_server(server) or server, name])
-
-
-def build_roll_command(
-    nation: str | None = None,
-    ship_type: str | None = None,
-    level: int | None = None,
-) -> str:
-    """随机战舰：``roll [国家] [类型] [等级]``，都不给就是全随机。"""
-    parts = ["roll"]
-    if nation:
-        parts.append(str(nation))
-    if ship_type:
-        parts.append(str(ship_type))
-    if level is not None:
-        parts.append(str(level))
-    return " ".join(parts)
-
-
-# 命令字面量映射：固定参数的查询直接查表，省得在 main.py 里散落魔法字符串。
-# 需要拼参数（身份 / 天数 / 筛选条件）的用上面的函数。
-COMMAND_BUILDERS: dict[str, str] = {
-    "recent_random": "recent_random",
-    "recent_rank": "recent_rank",
-    "recents": "recents",
-    "bind_list": "bind_list",
-    "bind_change": "change_bind",
-}
-
-
-def build_literal_command(
-    key: str,
-    server: str | None = None,
-    nickname: str | None = None,
-) -> str:
-    """无额外参数的查询：``<服务器> <昵称> <指令>``。"""
-    return " ".join(
-        part for part in (*_identity_tokens(server, nickname), COMMAND_BUILDERS[key]) if part
-    )
 
 
 # ===========================================================================
@@ -520,7 +442,8 @@ class QueryRunner:
                 if identity is None:
                     result.ok = False
                     result.message = (
-                        "该用户似乎还没绑定窝窝屎账号，请引导 TA 用 wws_bind 工具绑定后再查询"
+                        "该用户似乎还没绑定窝窝屎账号，请让用户自己发「/wws 绑定 <服务器> <游戏昵称>」绑定后再来查；"
+                        "不要替用户编昵称，也不要把群名片当游戏昵称"
                     )
                     return result
 
@@ -761,18 +684,8 @@ class QueryRunner:
             return ext.recent_summary(raw, only=only)
         if extractor == "ship_recent":
             return ext.ship_recent_summary(raw, only=only)
-        if extractor == "recents":
-            return ext.recents_summary(raw)
-        if extractor == "ships":
-            return ext.ships_summary(raw)
         if extractor == "ship_rank":
             return ext.ship_rank_summary(raw)
-        if extractor == "roll":
-            return ext.roll_summary(raw)
-        if extractor == "bind":
-            # 绑定类接口的返回有三种：绑定列表 / 「绑定成功」这类消息 / 其它结构，
-            # 统一交给 bind_result 归一化（字符串就直接用，列表就压成精简账号表）
-            return ext.bind_result(raw)
         return {}
 
 

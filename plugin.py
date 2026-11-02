@@ -20,9 +20,12 @@
 
 LLM 工具（`@Tool`，见文件后半段）：
 
-- 13 个 `wws_*` 工具，让用户在聊天里用自然语言查询战绩，AI 拿精简数据作答/点评，
+- 5 个 `wws_*` 查询工具，让用户在聊天里用自然语言查询战绩，AI 拿精简数据作答/点评，
   图片仍按 `/wws` 的排版渲染发给用户。`wws_ship_rank`（单船排行榜）是个例外：
   榜上是全服别人的成绩，跟提问者无关，所以**不注入身份、也不引导点评**。
+
+  绑定、按模式筛选、逐场明细、随机抽船这些**只在 `/wws` 指令里做**，不进对话工具：
+  工具越多模型越容易选错，而替用户改绑定是不可逆的误操作。
 
 渲染与数据都在 `hikari_core`（随插件分发）；本文件只做组件适配与生命周期管理。
 """
@@ -61,21 +64,16 @@ from .wows_bot import (
 )
 from .wows_bot.log import logger
 from .yuyuko_llm import (
-    COMMAND_BUILDERS,
     ERROR_EXCEPTION,
     ToolContext,
     ToolExecutor,
     ToolGuard,
     VARIANT_SHIP_TAGS,
     build_account_command,
-    build_bind_command,
-    build_literal_command,
     build_recent_command,
-    build_roll_command,
     build_ship_command,
     build_ship_rank_command,
     build_ship_recent_command,
-    build_ships_command,
     classify_error,
     resolve_account_id,
     resolve_identity,
@@ -730,8 +728,8 @@ _EXTRA_QUERY_CUES = (
     re.compile(r"(?<![A-Za-z])recent(?![A-Za-z])", re.IGNORECASE),
     # 「近期」不带数字也算：默认 1 天（见 _days_in_text）
     re.compile(r"近期"),
-    # 「随机」与近期同义，但裸「随机」不单独算触发：AI 工具里「随机抽船」
-    # 说的是 `wws_roll`，抢过来会把它当成船名查。只认带天数或跟着近期线索的写法。
+    # 「随机」与近期同义，但裸「随机」不单独算触发：`/wws 随机抽船` 里的「随机」是抽船
+    # 不是查战绩，抢过来会把它当成船名查。只认带天数或跟着近期线索的写法。
     re.compile(r"\d{1,3}\s*日?\s*随机"),
     re.compile(r"(?:近期|最近|recent)\s*随机", re.IGNORECASE),
     re.compile(r"查\s*[我咱俺]"),
@@ -739,11 +737,6 @@ _EXTRA_QUERY_CUES = (
     # 「最近30把西西里」是局数不是天数，别误触发
     re.compile(r"(?:近|最近)\s*(?:\d{1,3}|[一二两三四五六七八九十]{1,3})\s*(?:天|周|个\s*月)"),
 )
-
-# 只有用户原话真的提到「绑定」才允许 wws_bind 落地：
-# 实测模型在私聊里凭空调了一次 wws_bind，把默认账号从 A 换成了 B，
-# 之后的「查我」全都查到了别人号上，用户看到的是「没有出战记录」。
-_BIND_INTENT_RE = re.compile(r"绑定|绑|bind", re.IGNORECASE)
 
 # 「@机器人 + 自己查自己」的判定：出现「我 / 咱 / 俺」才算自己；
 # 出现「帮 / 给 / 替 / 他 / 她 / 群友」这类转指就不抢，交回模型，
@@ -3083,69 +3076,6 @@ class WowsYuyukoPlugin(MaiBotPlugin):
         return self._with_window(payload, days)
 
     @Tool(
-        "wws_recent_random",
-        brief_description="整账号近期随机战；单船改用 wws_ship_recent",
-        detailed_description=(
-            "只统计随机战 PVP。用户明确说「最近随机战」「随机打得怎么样」时调用。"
-            "用户只是泛泛地说「最近战绩」时，应优先用 wws_recent。"
-            "days 为最近天数（默认 7，最大 366=一年）。"
-        ),
-        parameters=[_p_days(), _p_server(), _p_nickname()],
-    )
-    async def tool_wws_recent_random(
-        self,
-        days: int | None = None,
-        server: str = "",
-        nickname: str = "",
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        server, nickname, hint = self._identity_or_hint(server, nickname, kwargs)
-        if hint:
-            return {"success": True, "content": hint}
-        days = self._resolve_days(days, kwargs)
-        payload = await self._run_tool(
-            kwargs,
-            build_recent_command(
-                _clamp_days(days), server, nickname, mode=COMMAND_BUILDERS["recent_random"]
-            ),
-            "recent",
-            "wws_recent_random",
-            inject_identity=not nickname,
-        )
-        return self._with_window(payload, days)
-
-    @Tool(
-        "wws_recent_rank",
-        brief_description="整账号近期排位战；单船改用 wws_ship_recent",
-        detailed_description=(
-            "只统计排位战。用户说「最近排位」「排位打得怎么样」时调用。"
-            "days 为最近天数（默认 7，最大 366=一年）。"
-        ),
-        parameters=[_p_days(), _p_server(), _p_nickname()],
-    )
-    async def tool_wws_recent_rank(
-        self,
-        days: int | None = None,
-        server: str = "",
-        nickname: str = "",
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        server, nickname, hint = self._identity_or_hint(server, nickname, kwargs)
-        if hint:
-            return {"success": True, "content": hint}
-        days = self._resolve_days(days, kwargs)
-        payload = await self._run_tool(
-            kwargs,
-            build_recent_command(
-                _clamp_days(days), server, nickname, mode=COMMAND_BUILDERS["recent_rank"]
-            ),
-            "recent",
-            "wws_recent_rank",
-            inject_identity=not nickname,
-        )
-        return self._with_window(payload, days)
-
-    @Tool(
         "wws_ship_recent",
         brief_description=(
             "单船+天数的水表，只在句中有船名且明确时间时用（例：西西里90天水表）；没提时间不要用；"
@@ -3298,179 +3228,6 @@ class WowsYuyukoPlugin(MaiBotPlugin):
             "ship_rank",
             "wws_ship_rank",
             prefer_exact=ship,
-            select_index=select_index,
-        )
-
-    @Tool(
-        "wws_recent_battles",
-        brief_description="查询玩家逐场的近期战斗明细",
-        detailed_description=(
-            "返回每一场的时间、结果、伤害等明细，而不是汇总统计。"
-            "用户问「我最近这场打得怎么样」「刚才那把如何」「逐场看看」时调用。"
-            "用户只想看总体近况时用 wws_recent 更合适。"
-        ),
-        parameters=[_p_server(), _p_nickname()],
-    )
-    async def tool_wws_recent_battles(
-        self, server: str = "", nickname: str = "", **kwargs: Any
-    ) -> dict[str, Any]:
-        server, nickname, hint = self._identity_or_hint(server, nickname, kwargs)
-        if hint:
-            return {"success": True, "content": hint}
-        return await self._run_tool(
-            kwargs,
-            build_literal_command("recents", server, nickname),
-            "recents",
-            "wws_recent_battles",
-            inject_identity=not nickname,
-        )
-
-    @Tool(
-        "wws_ships",
-        brief_description="按等级/国家/舰种筛选玩家战舰战绩列表",
-        detailed_description=(
-            "可筛等级区间、国家、舰种。用户问「我 10 级战列舰都打得怎么样」"
-            "「日系船的战绩」「8 到 10 级的巡洋舰」时调用。"
-            "返回列表可能较长，请自行归纳要点，不要把整张表念给用户。"
-            "min_level 最低等级（1-11，不填为 5）；max_level 最高等级（不填为不限）；"
-            "nation 如 日本 / 美国 / 苏联 / 德国 / 英国 / 法国 / 意大利 / 泛亚 / 欧洲 / 荷兰 / 西班牙 / 泛美；"
-            "ship_type 如 战列舰 / 巡洋舰 / 驱逐舰 / 航空母舰 / 潜艇。"
-        ),
-        parameters=[
-            _p_int("min_level", "最低等级（1-11），不填为 5"),
-            _p_int("max_level", "最高等级（1-11），不填为不限"),
-            _p_str("nation", "国家/系别，如 日本 / 美国 / 苏联 / 德国 / 英国 / 法国 / 意大利 / 泛亚 / 欧洲 / 荷兰 / 西班牙 / 泛美"),
-            _p_str("ship_type", "舰种，如 战列舰 / 巡洋舰 / 驱逐舰 / 航空母舰 / 潜艇"),
-            _p_server(),
-            _p_nickname(),
-        ],
-    )
-    async def tool_wws_ships(
-        self,
-        min_level: int | None = None,
-        max_level: int | None = None,
-        nation: str = "",
-        ship_type: str = "",
-        server: str = "",
-        nickname: str = "",
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        server, nickname, hint = self._identity_or_hint(server, nickname, kwargs)
-        if hint:
-            return {"success": True, "content": hint}
-        return await self._run_tool(
-            kwargs,
-            build_ships_command(min_level, max_level, nation or None, ship_type or None, server, nickname),
-            "ships",
-            "wws_ships",
-            inject_identity=not nickname,
-        )
-
-    @Tool(
-        "wws_roll_ship",
-        brief_description="从用户已拥有的战舰里随机抽一条（娱乐功能）",
-        detailed_description=(
-            "当用户说「随机来条船」「抽个船玩玩」「今天开什么船」时调用。"
-            "随机范围是当前用户**已绑定账号里拥有的船**，所以需要用户先绑定；"
-            "未绑定时会返回引导，此时请让用户先绑定再试。"
-            "可按国家、舰种、等级缩小范围，都不填就是从 TA 拥有的全部战舰里随机。"
-        ),
-        parameters=[
-            _p_str("nation", "限定国家/系别，如 日本 / 美国 / 苏联 / 德国 / 英国"),
-            _p_str("ship_type", "限定舰种，如 战列舰 / 巡洋舰 / 驱逐舰 / 航空母舰 / 潜艇"),
-            _p_int("level", "限定等级（1-11）"),
-        ],
-    )
-    async def tool_wws_roll_ship(
-        self,
-        nation: str = "",
-        ship_type: str = "",
-        level: int | None = None,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        return await self._run_tool(
-            kwargs,
-            build_roll_command(nation or None, ship_type or None, level),
-            "roll",
-            "wws_roll_ship",
-            require_user=True,
-        )
-
-    @Tool(
-        "wws_bind",
-        brief_description="把游戏账号绑定到当前用户",
-        detailed_description=(
-            "绑定后该用户说「查我的战绩」时无需再提供昵称。以下情况应主动引导绑定："
-            "1) 用户要查自己的战绩但尚未绑定（查询返回未绑定提示时）；"
-            "2) 用户直接说出了自己的游戏昵称，希望以后都能查；"
-            "3) 用户问「怎么绑定」「为什么查不了我的」。"
-            "引导时先问清楚昵称和服务器，别让用户自己猜参数格式。"
-            "nickname 与 server 都必填，server 可选：亚服 / 国服 / 欧服 / 美服 / 俄服。"
-            "注意：如果 wws_bind_list 显示该用户已经绑定过账号，不要重复绑定——"
-            "查 TA 自己的战绩直接调用 wws_account / wws_recent 并留空 server 和 nickname。"
-            "nickname 必须是游戏内昵称，不能用 QQ 昵称或群名片。"
-        ),
-        parameters=[
-            _p_nickname(required=True, description="用户的游戏昵称，必须提供（与游戏内完全一致）"),
-            _p_server(required=True, description="账号所在服务器，必须提供：亚服 / 国服 / 欧服 / 美服 / 俄服"),
-        ],
-        core_tool=True,
-    )
-    async def tool_wws_bind(
-        self, nickname: str = "", server: str = "", **kwargs: Any
-    ) -> dict[str, Any]:
-        server, nickname = _identity(server, nickname)
-        text = self._original_text(kwargs)
-        if text and not _BIND_INTENT_RE.search(_strip_at_tokens(text)):
-            logger.info(
-                f"[wows] 原话没要求绑定，拒绝模型调用 wws_bind: 昵称={nickname!r} 消息={text[:40]!r}"
-            )
-            return {
-                "success": True,
-                "content": (
-                    "用户这条消息没有要求绑定账号，不要调用 wws_bind，也不要把聊天里出现的昵称写进绑定。"
-                    "只是查自己的战绩就直接调用查询工具；确实要绑定时，让用户明确说「绑定」"
-                    "并给出服务器和游戏内昵称。"
-                ),
-            }
-        command = await _bind_by_aid(server, nickname) or build_bind_command(server, nickname)
-        return await self._run_tool(kwargs, command, "bind", "wws_bind")
-
-    @Tool(
-        "wws_bind_list",
-        brief_description="查看当前用户已绑定的游戏账号",
-        detailed_description=(
-            "当用户问「我绑定了什么」、绑定失败怀疑绑错、或查询结果与预期不符时调用。"
-        ),
-        parameters=[],
-    )
-    async def tool_wws_bind_list(self, **kwargs: Any) -> dict[str, Any]:
-        return await self._run_tool(
-            kwargs, COMMAND_BUILDERS["bind_list"], "bind", "wws_bind_list"
-        )
-
-    @Tool(
-        "wws_bind_change",
-        brief_description="在已绑定的多个游戏账号之间切换",
-        detailed_description=(
-            "需要用户已绑定两个以上账号。用法分两步：先不带 select_index 调用本工具"
-            "（会返回绑定列表），把列表转述给用户；用户选定后再带 select_index 调用一次完成切换。"
-        ),
-        parameters=[_p_int("select_index", "要切换到的序号（从 1 开始）。不填则只返回绑定列表供用户选择")],
-    )
-    async def tool_wws_bind_change(
-        self, select_index: int | None = None, **kwargs: Any
-    ) -> dict[str, Any]:
-        if select_index is None:
-            # 第一步：先给绑定列表（change_bind 不带序号时会返回候选项，不够直观）
-            return await self._run_tool(
-                kwargs, COMMAND_BUILDERS["bind_list"], "bind", "wws_bind_list"
-            )
-        return await self._run_tool(
-            kwargs,
-            COMMAND_BUILDERS["bind_change"],
-            "bind",
-            "wws_bind_change",
             select_index=select_index,
         )
 

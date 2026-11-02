@@ -1,7 +1,7 @@
 """LLM 工具的共享执行流程。
 
 每个工具在 ``plugin.py`` 里只是一个薄壳（``@Tool`` 的参数声明），
-真正的流程在这里，避免 12 份重复代码：
+真正的流程在这里，避免每个工具重复一遍：
 
     限流检查 -> 查询（不渲染） -> 渲染发图给用户 -> 返回精简数据给 LLM
 
@@ -36,7 +36,7 @@ from .guide import (
     config_get_bool,
     humanize_error,
 )
-from .query import QueryResult, QueryRunner, resolve_identity
+from .query import QueryResult, QueryRunner
 from .tool_spec import IMAGE_FAILED_GUIDE, SERVER_CODE_HINT
 
 __all__ = ["ToolExecutor", "ToolContext"]
@@ -85,7 +85,6 @@ class ToolExecutor:
         select_index: int | None = None,
         battle_mode: str | None = None,
         inject_identity: bool = False,
-        require_user: bool = False,
         prefer_exact: str | None = None,
         **extract_kwargs: Any,
     ) -> str:
@@ -93,13 +92,10 @@ class ToolExecutor:
 
         Args:
             tool_name: 工具名，用于查它自己的开关（见 ``guide.TOOL_SWITCH_FIELDS``）。
-            require_user: 工具是否依赖当前用户的平台账号（如 roll 走 yuyuko 的
-                平台绑定）；没有账号时给出绑定引导，而不是把上游的参数校验错误丢给模型。
             inject_identity: 是否需要「查自己」的账号上下文。
                 为 True 时由插件解析绑定账号并注入，绕开 hikari me 模式的
                 「平台 ID 当 accountId」问题（见 ``query.resolve_identity``）。
-                查询类工具都要开；``roll`` 不需要账号，绑定类工具本身就是绑定操作，
-                二者传 False 即可。
+                查询类工具都要开。
             prefer_exact: 船名搜索命中多条时自动选中同名那条（见
                 ``query.match_exact_index``），单船类工具传用户写的船名即可。
         """
@@ -121,21 +117,14 @@ class ToolExecutor:
         if not tc.platform:
             return "当前消息平台不支持战绩查询。"
 
-        # 5) 依赖平台账号但拿不到：给出可执行的下一步，别把参数校验错误丢给模型
-        if require_user and not tc.user_id:
-            return (
-                "无法确定当前用户的平台账号，这个功能需要用户先绑定游戏账号。"
-                "请让用户完成绑定（可用 wws_bind 工具）后再重新调用本工具。"
-            )
-
-        # 6) 查自己但没有平台账号：不猜，直接让模型向用户要昵称
+        # 5) 查自己但没有平台账号：不猜，直接让模型向用户要昵称
         if inject_identity and not tc.user_id:
             return (
                 "无法确定当前用户的平台账号，因此查不了「TA 自己」的战绩。"
                 "请向用户询问游戏昵称与服务器，然后带上 nickname 和 server 重新调用本工具。"
             )
 
-        # 7) 限流
+        # 6) 限流
         limited = self._guard.check(tc.stream_id)
         if limited:
             return limited
@@ -157,14 +146,14 @@ class ToolExecutor:
             **extract_kwargs,
         )
 
-        # 8) 需要用户二次选择：把候选列表交给模型转述，不发图
+        # 7) 需要用户二次选择：把候选列表交给模型转述，不发图
         if result.need_select:
             return result.message
 
         if not result.ok:
-            return await self._format_error(result, tc, tool_name)
+            return self._format_error(result)
 
-        # 9) 渲染发图：和 wws 指令走同一套渲染与发送逻辑
+        # 8) 渲染发图：和 wws 指令走同一套渲染与发送逻辑
         image_failed = False
         if send_image:
             image_failed = await self._send_rendered(runner, result, tc)
@@ -213,29 +202,16 @@ class ToolExecutor:
         else:
             logger.warning(f"[wows] LLM 工具{stage}图片失败（网络类，可重试）: {exc!r}")
 
-    async def _format_error(
-        self, result: QueryResult, tc: ToolContext, tool_name: str = ""
-    ) -> str:
+    @staticmethod
+    def _format_error(result: QueryResult) -> str:
         """失败信息交给话术层换成行动指引。
 
         ``network`` / ``exception`` 两类**不把原始报错交给模型** ——
         那些是给开发者看的堆栈与英文异常，转述给用户毫无意义还容易吓人。
-
-        绑定失败时额外查一次已有绑定：用户其实绑过账号却反复让 TA 再绑，
-        是最常见的死循环（模型看到「昵称不合法」就以为没绑）。
         """
         if result.error_kind in (ERROR_NETWORK, ERROR_EXCEPTION):
             return humanize_error("", result.error_kind)
-        text = humanize_error(result.message, result.error_kind)
-        if tool_name == "wws_bind" and tc.user_id:
-            bound = await resolve_identity(tc.platform, tc.user_id)
-            if bound and bound.get("user_name"):
-                text += (
-                    f"\n（补充：这个用户已经绑定过 {bound.get('server')} "
-                    f"{bound.get('user_name')}，不需要再绑定。要查 TA 自己的战绩，"
-                    "直接调用 wws_account / wws_recent 并留空 server 和 nickname。）"
-                )
-        return text
+        return humanize_error(result.message, result.error_kind)
 
     @staticmethod
     def _log_extracted(extractor: str, payload: Any) -> None:

@@ -12,7 +12,7 @@ from typing import ClassVar, Literal
 
 from maibot_sdk import Field, PluginConfigBase
 
-CONFIG_SCHEMA_VERSION = "1.6.0"
+CONFIG_SCHEMA_VERSION = "1.7.0"
 
 
 class PluginSection(PluginConfigBase):
@@ -186,20 +186,10 @@ class LlmToolConfig(PluginConfigBase):
         description="查询最近战绩汇总（全部模式）",
         json_schema_extra={"label": "近期战绩", "order": 12},
     )
-    enable_recent_random: bool = Field(
-        default=True,
-        description="查询最近随机战战绩",
-        json_schema_extra={"label": "近期随机战", "order": 13},
-    )
-    enable_recent_rank: bool = Field(
-        default=True,
-        description="查询最近排位战战绩",
-        json_schema_extra={"label": "近期排位战", "order": 14},
-    )
     enable_ship_recent: bool = Field(
         default=True,
         description="查询指定单船的近期战绩",
-        json_schema_extra={"label": "单船近期战绩", "order": 15},
+        json_schema_extra={"label": "单船近期战绩", "order": 13},
     )
     enable_ship_rank: bool = Field(
         default=True,
@@ -207,37 +197,7 @@ class LlmToolConfig(PluginConfigBase):
             "查询单船服务器排行榜（全服榜单，不需要用户绑定账号）；"
             "关掉后简易查询里的「/查CN西西里排行榜」这类写法也不再响应"
         ),
-        json_schema_extra={"label": "单船排行榜", "order": 16},
-    )
-    enable_recent_battles: bool = Field(
-        default=True,
-        description="查询近期逐场战斗明细",
-        json_schema_extra={"label": "逐场明细", "order": 17},
-    )
-    enable_ships: bool = Field(
-        default=True,
-        description="按等级/国家/舰种筛选战舰战绩列表",
-        json_schema_extra={"label": "筛选查询", "order": 18},
-    )
-    enable_roll_ship: bool = Field(
-        default=True,
-        description="随机抽一条战舰（娱乐功能）",
-        json_schema_extra={"label": "随机抽船", "order": 19},
-    )
-    enable_bind: bool = Field(
-        default=True,
-        description="绑定游戏账号",
-        json_schema_extra={"label": "绑定账号", "order": 20},
-    )
-    enable_bind_list: bool = Field(
-        default=True,
-        description="查看已绑定的游戏账号",
-        json_schema_extra={"label": "查看绑定", "order": 21},
-    )
-    enable_bind_change: bool = Field(
-        default=True,
-        description="切换当前使用的绑定账号",
-        json_schema_extra={"label": "切换绑定", "order": 22},
+        json_schema_extra={"label": "单船排行榜", "order": 14},
     )
 
 

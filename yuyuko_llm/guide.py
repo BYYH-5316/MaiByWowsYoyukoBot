@@ -46,16 +46,8 @@ TOOL_SWITCH_FIELDS: dict[str, str] = {
     "wws_account": "enable_account",
     "wws_ship": "enable_ship",
     "wws_recent": "enable_recent",
-    "wws_recent_random": "enable_recent_random",
-    "wws_recent_rank": "enable_recent_rank",
     "wws_ship_recent": "enable_ship_recent",
     "wws_ship_rank": "enable_ship_rank",
-    "wws_recent_battles": "enable_recent_battles",
-    "wws_ships": "enable_ships",
-    "wws_roll_ship": "enable_roll_ship",
-    "wws_bind": "enable_bind",
-    "wws_bind_list": "enable_bind_list",
-    "wws_bind_change": "enable_bind_change",
 }
 
 
@@ -122,15 +114,15 @@ _ERROR_GUIDES: tuple[tuple[tuple[str, ...], str], ...] = (
         ("用户名不符合规范",),
         "这个昵称在该服务器下无效：多半是服务器选错，或把 QQ 昵称 / 群名片当成了游戏昵称。"
         "请向用户确认游戏内昵称与所在服务器后重试；"
-        "如果用户其实已经绑定过账号（可先用 wws_bind_list 确认），不要再绑定，"
+        "如果用户其实已经绑定过账号，不必再绑定，"
         "直接查自己（调用 wws_account / wws_recent，不传 server 和 nickname）。",
     ),
     (
         ("用户不存在", "账号不存在", "未找到该用户", "未找到对应"),
         "没有找到这个昵称对应的游戏账号。请向用户确认服务器与昵称是否与游戏内完全一致"
         "（不要带公会标签、不要多空格；昵称含空格时整体加括号），确认后重新调用本工具；"
-        "如果用户其实想查自己，可以先调用 wws_bind_list 看已绑定的账号；"
-        "已经绑定过的话不要再绑定，直接查自己（不传 server 和 nickname）。",
+        "如果用户其实想查自己，直接查自己（不传 server 和 nickname）；"
+        "还没绑定的话，让用户自己发「/wws 绑定 <服务器> <游戏昵称>」绑定后再来查。",
     ),
     (
         ("未识别", "请发送wws help", "无法识别参数"),
